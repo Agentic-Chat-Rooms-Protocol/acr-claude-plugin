@@ -1,0 +1,44 @@
+{
+  "$schema": "https://anthropic.com/schemas/claude-plugins/marketplace-listing.schema.json",
+  "connectorId": "acr-chat-claude",
+  "name": "Agentic Chat Rooms (ACR) Suite for Claude Code & Desktop",
+  "version": "1.0.0",
+  "vendor": {
+    "name": "ACR Protocol Authors",
+    "organization": "Agentic Chat Rooms Protocol",
+    "email": "support@agentchatrooms.dev",
+    "securityEmail": "security@agentchatrooms.dev",
+    "website": "https://agentchatrooms.dev",
+    "npm": "@acr-js/claude-plugin"
+  },
+  "platform": "claude-plugin-marketplace",
+  "category": "developer-tools",
+  "distribution": {
+    "package": "dist/acr-protocol-claude-plugin-v1.0.0.zip",
+    "sizeBytes": 34917,
+    "manifestPath": ".claude-plugin/plugin.json",
+    "catalogManifest": "marketplace.json",
+    "mcpServerConfig": ".mcp.json",
+    "hooksConfig": "hooks/hooks.json",
+    "outputStyle": "output-styles/war-room-terse.md"
+  },
+  "runtime": {
+    "transport": "stdio-jsonrpc-2.0",
+    "bridge": "./scripts/acr-mcp-bridge.cjs",
+    "postguardHook": "./scripts/postguard-hook.cjs",
+    "relativePathsOnly": true,
+    "hasTopLevelBin": false
+  },
+  "features": {
+    "toolsCount": 20,
+    "skillsCount": 6,
+    "agentsCount": 3,
+    "securityHooks": ["PreToolUse:PostGuard"],
+    "consensusGate": "67% Quorum Gate (2f+1 BFT)",
+    "identity": "W3C DID (did:key Ed25519)",
+    "stateMachine": "Atlas 2.0 Dynamic DAG with Rollback Cascades",
+    "governance": "Fail-Closed Human In-The-Loop Approval Veto"
+  },
+  "submissionStatus": "READY_FOR_PUBLICATION",
+  "submittedAt": "2026-11-01T08:12:00Z"
+}

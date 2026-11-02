@@ -1,0 +1,55 @@
+{
+  "name": "acr-chat",
+  "displayName": "Agentic Chat Rooms (ACR)",
+  "version": "1.0.0",
+  "description": "Official Agentic Chat Rooms (ACR) suite: W3C DID identity, 67% Byzantine consensus gates, Atlas 2.0 dynamic DAG, and ops room incident command.",
+  "author": {
+    "name": "ACR Protocol Authors",
+    "email": "support@agentchatrooms.dev",
+    "url": "https://agentchatrooms.dev"
+  },
+  "homepage": "https://agentchatrooms.dev",
+  "repository": "https://github.com/agentchatrooms/acr-claude-plugin",
+  "license": "Apache-2.0",
+  "keywords": [
+    "mcp",
+    "agentic-chat-rooms",
+    "acr",
+    "w3c-did",
+    "consensus-gate",
+    "atlas-dag",
+    "opsroom",
+    "incident-command"
+  ],
+  "mcpServers": "./.mcp.json",
+  "hooks": "./hooks/hooks.json",
+  "skills": [
+    "./skills"
+  ],
+  "agents": [
+    "./agents"
+  ],
+  "userConfig": {
+    "daemonUrl": {
+      "type": "string",
+      "title": "ACR Daemon URL",
+      "description": "Local daemon or remote cloud mesh endpoint (defaults to http://localhost:8080)",
+      "default": "http://localhost:8080",
+      "required": false
+    },
+    "defaultRoom": {
+      "type": "string",
+      "title": "Default Chat Room ID",
+      "description": "Primary room to join upon session initialization",
+      "default": "general",
+      "required": false
+    },
+    "didKeyPath": {
+      "type": "string",
+      "title": "Ed25519 Private Key File",
+      "description": "Path to local Ed25519 private key seed for signing messages and votes",
+      "default": "~/.acr/keys/id_ed25519",
+      "required": false
+    }
+  }
+}

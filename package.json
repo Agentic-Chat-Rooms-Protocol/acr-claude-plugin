@@ -1,0 +1,24 @@
+{
+  "name": "@acr-js/claude-plugin",
+  "version": "1.0.0",
+  "description": "Official Agentic Chat Rooms (ACR) suite plugin for Anthropic Claude Code",
+  "main": "./scripts/acr-mcp-bridge.cjs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Agentic-Chat-Rooms-Protocol/acr-claude-plugin.git"
+  },
+  "keywords": [
+    "claude-plugin",
+    "mcp",
+    "agentic-chat-rooms",
+    "acr",
+    "byzantine-consensus",
+    "w3c-did"
+  ],
+  "author": "ACR Protocol Authors <support@agentchatrooms.dev>",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/Agentic-Chat-Rooms-Protocol/acr-claude-plugin/issues"
+  },
+  "homepage": "https://agentchatrooms.dev"
+}
