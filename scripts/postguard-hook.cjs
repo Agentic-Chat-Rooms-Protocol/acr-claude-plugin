@@ -9,7 +9,9 @@
  *
  * Implements Claude Code Hook Protocol:
  * Input (stdin): JSON object with tool_name and tool_input
- * Output (stdout): JSON object with hookSpecificOutput containing permissionDecision ("allow" | "deny")
+ * Output (stdout): JSON object with hookSpecificOutput.permissionDecision "deny" when a rule matches.
+ * Clean payloads produce no output (exit 0), so Claude Code's own permission flow stays in control;
+ * this hook never auto-approves a tool call.
  */
 
 const fs = require('fs');
@@ -116,17 +118,6 @@ function scanPayload(toolName, toolInput) {
   return { passed: true };
 }
 
-function respondAllow(reason) {
-  const output = {
-    hookSpecificOutput: {
-      hookEventName: 'PreToolUse',
-      permissionDecision: 'allow',
-      permissionDecisionReason: reason || 'Payload sanitized and passed PostGuard security policies.'
-    }
-  };
-  process.stdout.write(JSON.stringify(output, null, 2) + '\n');
-}
-
 function respondDeny(toolName, category, description) {
   const reason = `PostGuard blocked tool call '${toolName || 'unknown'}': [${category}] ${description}`;
   const output = {
@@ -151,7 +142,6 @@ function main() {
 
   process.stdin.on('end', () => {
     if (!rawData.trim()) {
-      respondAllow('Empty hook payload; allowing invocation.');
       return;
     }
 
@@ -164,16 +154,12 @@ function main() {
 
       if (!scanResult.passed) {
         respondDeny(toolName, scanResult.category, scanResult.description);
-      } else {
-        respondAllow(`Tool '${toolName}' verified clean by PostGuard scanner.`);
       }
     } catch (err) {
       // If parsing fails, fall back to string scan of raw input
       const fallbackResult = scanPayload('raw_stdin', rawData);
       if (!fallbackResult.passed) {
         respondDeny('raw_stdin', fallbackResult.category, fallbackResult.description);
-      } else {
-        respondAllow('Raw payload parsed safely and passed heuristics.');
       }
     }
   });

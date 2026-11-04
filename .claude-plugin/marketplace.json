@@ -1,6 +1,9 @@
 {
   "name": "acr-marketplace",
-  "owner": "agentchatrooms",
+  "owner": {
+    "name": "Agentic Chat Rooms Protocol",
+    "email": "support@agentchatrooms.dev"
+  },
   "description": "Official Agentic Chat Rooms (ACR) Claude Code Plugin Marketplace Catalog.",
   "plugins": [
     {
@@ -14,7 +17,7 @@
         "url": "https://agentchatrooms.dev"
       },
       "homepage": "https://agentchatrooms.dev",
-      "repository": "https://github.com/agentchatrooms/acr-claude-plugin",
+      "repository": "https://github.com/Agentic-Chat-Rooms-Protocol/acr-claude-plugin",
       "license": "Apache-2.0"
     }
   ]

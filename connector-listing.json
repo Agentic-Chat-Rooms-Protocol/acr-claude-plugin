@@ -14,8 +14,6 @@
   "platform": "claude-plugin-marketplace",
   "category": "developer-tools",
   "distribution": {
-    "package": "dist/acr-protocol-claude-plugin-v1.0.0.zip",
-    "sizeBytes": 34917,
     "manifestPath": ".claude-plugin/plugin.json",
     "catalogManifest": "marketplace.json",
     "mcpServerConfig": ".mcp.json",
@@ -24,9 +22,9 @@
   },
   "runtime": {
     "transport": "stdio-jsonrpc-2.0",
-    "bridge": "./scripts/acr-mcp-bridge.cjs",
-    "postguardHook": "./scripts/postguard-hook.cjs",
-    "relativePathsOnly": true,
+    "bridge": "${CLAUDE_PLUGIN_ROOT}/scripts/acr-mcp-bridge.cjs",
+    "postguardHook": "${CLAUDE_PLUGIN_ROOT}/scripts/postguard-hook.sh",
+    "pluginRootPathsOnly": true,
     "hasTopLevelBin": false
   },
   "features": {

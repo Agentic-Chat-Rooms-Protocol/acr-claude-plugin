@@ -31,6 +31,7 @@ function createZipArchive(files, outputPath) {
     const compressedData = deflateRawSync(data);
     const compressedSize = compressedData.length;
     const nameBuf = Buffer.from(file.relPath, "utf-8");
+    const unixMode = statSync(file.fullPath).mode & 0o777;
 
     // Local file header (30 bytes + name)
     const localHeader = Buffer.alloc(30 + nameBuf.length);
@@ -52,7 +53,7 @@ function createZipArchive(files, outputPath) {
     // Central directory header (46 bytes + name)
     const centralHeader = Buffer.alloc(46 + nameBuf.length);
     centralHeader.writeUInt32LE(0x02014b50, 0); // signature
-    centralHeader.writeUInt16LE(20, 4); // version made by
+    centralHeader.writeUInt16LE((3 << 8) | 20, 4); // version made by (Unix host, 2.0)
     centralHeader.writeUInt16LE(20, 6); // version needed
     centralHeader.writeUInt16LE(0, 8); // flag
     centralHeader.writeUInt16LE(8, 10); // method (deflate)
@@ -66,7 +67,7 @@ function createZipArchive(files, outputPath) {
     centralHeader.writeUInt16LE(0, 32); // comment len
     centralHeader.writeUInt16LE(0, 34); // disk start
     centralHeader.writeUInt16LE(0, 36); // internal attr
-    centralHeader.writeUInt32LE(0, 38); // external attr
+    centralHeader.writeUInt32LE(((0o100000 | unixMode) << 16) >>> 0, 38); // external attr (unix mode)
     centralHeader.writeUInt32LE(offset, 42); // relative offset of local header
     nameBuf.copy(centralHeader, 46);
 
@@ -99,6 +100,7 @@ function createZipArchive(files, outputPath) {
 
 const includePaths = [
   ".claude-plugin/plugin.json",
+  ".claude-plugin/icon.png",
   ".claude-plugin/marketplace.json",
   "marketplace.json",
   ".mcp.json",
@@ -112,6 +114,7 @@ const includePaths = [
   "output-styles/war-room-terse.md",
   "scripts/acr-mcp-bridge.cjs",
   "scripts/postguard-hook.cjs",
+  "scripts/postguard-hook.sh",
   "skills/acr-room-collaboration/SKILL.md",
   "skills/acr-room-collaboration/references/etiquette.md",
   "skills/acr-identity-did/SKILL.md",

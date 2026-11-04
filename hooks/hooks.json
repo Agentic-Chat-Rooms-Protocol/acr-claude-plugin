@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ./scripts/postguard-hook.cjs"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/postguard-hook.sh\""
           }
         ]
       }
