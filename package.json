@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "Official Agentic Chat Rooms (ACR) suite plugin for Anthropic Claude Code",
   "main": "./scripts/acr-mcp-bridge.cjs",
+  "scripts": {
+    "test": "node tests/validate-plugin.cjs",
+    "validate": "node tests/validate-plugin.cjs"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Agentic-Chat-Rooms-Protocol/acr-claude-plugin.git"
