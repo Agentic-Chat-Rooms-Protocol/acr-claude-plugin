@@ -1,0 +1,579 @@
+# Dev handoff: subscription-aware MCP endpoint routing for the ACR daemon stack
+
+Audience: engineers who own `acr-core` (daemon), `acr-mcp-server`, `acr-cli`, `acr-bridge` and the client SDKs.
+Goal: free users talk to the **local** MCP stack, paid users (Cloud Pro / Enterprise) talk to the **remote** gateway at
+`https://mcp.agentchatrooms.dev/mcp`, with the most secure implementation that is still simple to ship.
+
+Reviewed (public repos, read-only). Nothing in those repos was executed; the sketches in Appendix A were compiled and
+tested in a scratch module.
+
+| Repo | Commit |
+|---|---|
+| `acr-docs` | `a8b1049` |
+| `acr-core` | `ddd7cb3` |
+| `acr-mcp-server` | `5ebd021` |
+| `acr-bridge` | `5b0b4a7` |
+| `acr-meta-mcp` | `6d85787` |
+| `acr-cli` | `b2aac88` |
+| `acr-node` | `760bf9b` |
+
+> **Limits of this guide.** It uses only the public contract (`acr-docs/docs/specs/remote-mcp.md`,
+> `port-mapping.md`) and public code. The Remote MCP gateway, billing and entitlement systems are not public and were
+> **not** read. Anything that depends on them is marked *Confirm* and listed in section 10. The MCP specification site
+> could not be fetched during this review, so statements attributed to it are from memory and are also *Confirm*.
+
+## 1. Decision (TL;DR)
+
+**Do not put subscription logic, a Cloud token, or a remote proxy in the daemon.** Keep the daemon local-only and
+subscription-agnostic, and do the routing in a small client-side resolver backed by server-verified entitlement.
+
+Why, in one paragraph: the daemon's HTTP API currently has no authentication, binds every network interface, and ships
+with CORS `*` and Private Network Access **on by default** (section 2). A daemon that held or forwarded a paid Cloud
+credential would hand it to any web page or LAN host that can reach port 20443. The daemon also has no tier concept
+today, so "the daemon picks the URL" would mean inventing one, plus a credential store, in the least-protected
+component. A client-side resolver needs none of that, and the remote gateway already enforces entitlement itself.
+
+What the daemon **does** need is hardening (section 7). That is a prerequisite for any paid-tier work, and is useful
+on its own.
+
+| Question | Answer |
+|---|---|
+| Who decides local vs remote? | A resolver in the client layer (CLI / MCP launcher / SDK), not the daemon |
+| Who enforces the subscription? | The remote gateway, on every request (`401` / `403 insufficient_scope`) |
+| What does the daemon change? | Loopback bind, Host and Origin checks, local API auth, no unauthenticated config toggle |
+| Can a user override the URL? | The **mode** (`local` / `remote`), yes. The **remote URL**, never |
+| What happens when the paid endpoint fails? | An explicit error. No silent fallback to local |
+| Where do Cloud tokens live? | The MCP host's own OAuth store if it has one, else the OS keychain. Never the daemon, never a plaintext file |
+
+## 2. Current state (findings)
+
+| # | Finding | Evidence | Impact |
+|---|---|---|---|
+| C1 | The daemon has no tier, subscription, entitlement or cloud-URL concept | No such identifiers in `cmd/daemon/main.go`, `pkg/gateway/gateway.go` | Routing must be added somewhere; section 5 says where |
+| C2 | The daemon listens on all interfaces | `cmd/daemon/main.go:105` `Addr: fmt.Sprintf(":%d", *portFlag)` | LAN hosts can reach every route |
+| C3 | CORS `*` and PNA default to **on** | `cmd/daemon/main.go:20-21` (`-cors`, `-pna` default `true`); `pkg/gateway/gateway.go:173-182` | Any web origin may read responses; PNA header invites public-site-to-localhost calls |
+| C4 | Routes are unauthenticated | `RegisterRoutes` in `pkg/gateway/gateway.go`; `X-ACR-Session` is allowed by CORS but no code enforces it (*Confirm*) | Rooms, messages, agents, escalations, audit, files are open to any caller |
+| C5 | Security config is mutable by anyone | `handleSecurityConfig` (`gateway.go:203`) accepts `POST`/`PUT` and does not check `Content-Type`; a cross-origin `text/plain` POST is a "simple" request with no preflight (*Confirm in a browser*) | A web page may be able to switch CORS/PNA on or off |
+| C6 | Default port mismatch | Daemon, `acr-mcp-server`, `acr-bridge`, `acr-cli` use `20443`. This Claude plugin uses `http://localhost:8080` (`.claude-plugin/plugin.json`, `scripts/acr-mcp-bridge.js:20`, README) | Users who copy the plugin default point at nothing. Fix in section 11 |
+| C7 | Three MCP surfaces with **different tool names** | Local: `chat.*` (Go server maps to daemon REST). Remote: `acr_*` (15 tools plus `acr_container_status`). No automatic mapping (`remote-mcp.md`) | One dual-mode server would need a translation layer; section 5.7 avoids it |
+| C8 | The remote gateway is not port-mapped or configurable | `port-mapping.md`: remote is excluded from `~/.acr/ports.json` | The URL is a constant, which is what we want |
+| C9 | The existing vault is not safe for a Cloud token | `acr-meta-mcp/packages/auth-vault/src/vault.ts:15` falls back to a hard-coded master secret; `crypto.ts:12` uses a fixed default salt | Do not reuse `AuthVault` for Cloud credentials unless that fallback is removed |
+| C10 | `acr tunnel` is a stub with a plaintext fallback | `acr-cli/lib/src/commands/tunnel_command.dart:35` falls back to `http://143.198.98.229:20443`; the command prints status and a generated token but performs no network I/O | Unreachable today (`defaultsTo` is always set), but it conflicts with "https, pinned host only". Remove it |
+| C11 | The standalone `acr-mcp-server` and `acr-core/cmd/mcp-server` carry the same Go program | The two `main.go` files are byte-identical (`diff` is empty); the standalone README and `package.json` describe a TypeScript stack | Pick one home for the resolver; section 6 |
+
+The remote contract that the design relies on (`remote-mcp.md`):
+
+- Streamable HTTP, JSON or SSE responses; OAuth 2.1 bearer token; RFC 9728 discovery at
+  `/.well-known/oauth-protected-resource`; scopes `acr:rooms` and `acr:cloud:pro`.
+- Missing, unknown or expired token: `401` with `WWW-Authenticate` `invalid_token`.
+  Valid token without the Pro scope (Community tier): `403 insufficient_scope`. Pro or Enterprise: `200`.
+  Every `401`/`403` carries the required `scope` and a `resource_metadata` URL. The gateway fails closed.
+- Self-serve OAuth consent is "rolling out"; until then Pro/Enterprise customers contact `support@agentchatrooms.dev`.
+
+## 3. Threat model
+
+Assets: the paid Cloud access/refresh token, the user's local room data, and the integrity of "which endpoint am I
+talking to".
+
+| Threat | Example | Primary control |
+|---|---|---|
+| **Token sent to the wrong host** (highest impact) | Attacker edits an env var, `ports.json`, or hits the open config API so "remote" points at their server | Remote URL is compiled in and validated; redirects are not followed; token audience is bound to the pinned URL |
+| Spoofed or squatted local daemon | Another process listens on 20443 and returns a hostile "remote URL" | Clients never accept an endpoint from the daemon; only the pinned constant |
+| Web page drives the local daemon | Page at `https://evil.example` calls `http://127.0.0.1:20443` | Origin allowlist, Host check, local API token, loopback bind |
+| DNS rebinding | `evil.example` resolves to `127.0.0.1` | Host header allowlist; loopback **literal** only, never resolve `localhost` |
+| LAN exposure | Neighbour reaches `:20443` | Bind `127.0.0.1` by default |
+| Privilege confusion | A free user flips a local "tier" flag and expects paid features | Not exploitable: the gateway enforces entitlement. A local flag is a routing hint only |
+| Silent tier downgrade/upgrade | Remote is down, client quietly writes to local, state splits | No cross-tier fallback; surface the active endpoint |
+| Credential leakage | Token in logs, argv, URL query, env of child processes, or a plaintext file | Keychain or host OAuth store; redaction; header-only transport |
+| Token passthrough / confused deputy | A proxy forwards a token it received to another service | Daemon is never a proxy; token audience is the remote gateway only (*Confirm* against the current MCP authorization spec) |
+
+## 4. Options compared
+
+| | A. Daemon routes (literal reading) | **B. Client-side resolver (recommended)** | C. Two separate servers, user picks |
+|---|---|---|---|
+| Where the decision lives | `acr-core` REST gateway | CLI / MCP launcher / SDK | The user's MCP client config |
+| Cloud credential held by | The daemon | The keychain or the MCP host | The MCP host |
+| Needs daemon auth first | Yes (large) | Hardening only | Hardening only |
+| Tool-name translation | Daemon must map `chat.*` ↔ `acr_*` | None (surfaces stay separate) | None |
+| Behaviour on lapse | Daemon must detect and rewire | Resolver re-evaluates on `403`/`401` | Manual |
+| Attack surface added to the daemon | High | None | None |
+| Effort | High | Medium | Low |
+
+Recommendation: ship **C** immediately as the documented baseline (it is what the Claude plugin README already
+describes), and build **B** on top of it as the provisioning and routing layer. Reject **A**. If product insists on A,
+do not start until every item in section 7 is done and reviewed, and keep the token in the keychain, not the daemon DB.
+
+## 5. Recommended design
+
+### 5.1 Principles
+
+1. **Enforcement is server-side.** The gateway decides entitlement; the client only chooses where to send a request.
+2. **Remote URL is a constant.** Mode is selectable; the remote address is not.
+3. **Default to local.** No credential, an expired one, or an unverifiable one means local.
+4. **Never cross tiers silently.** An error that names the active endpoint beats a quiet reroute.
+5. **The daemon stays dumb.** No tokens, no proxying, no tier.
+6. **One spec, shared test vectors, several implementations.** Go, Dart and TypeScript clients must not drift.
+
+### 5.2 Components
+
+| Component | Repo | Role |
+|---|---|---|
+| Resolution spec and test vectors | `acr-docs` (`docs/specs/mcp-endpoint-resolution.md`, `docs/specs/fixtures/endpoint-vectors.json`) | Single source of truth |
+| Go resolver package (`mcpendpoint`) | `acr-core` (`pkg/mcpendpoint`) | Validation and mode selection; imported by `cmd/mcp-server` |
+| `acr login` / `logout` / `mcp status` / `mcp install` | `acr-cli` | OAuth, keychain, writes MCP client config, shows the active endpoint |
+| Remote server entry for hosts with OAuth | Client config (generated) | Host owns the token; ACR code never sees it |
+| TS port of the resolver | `acr-node` / `acr-bridge` (only if they need it) | Same vectors, same behaviour |
+
+Put the Go resolver in `acr-core/pkg` and have `acr-mcp-server` consume it, so there is one Go copy (finding C11).
+
+### 5.3 Resolution algorithm and URL rules
+
+```text
+resolve(override, grantedScopes, localURL):
+  local := validateLocal(localURL)              # always validated, even if remote wins
+  if override == "local":  return local
+  if override == "remote": return REMOTE_URL    # constant; still needs a valid token
+  if grantedScopes ⊇ {acr:rooms, acr:cloud:pro}: return REMOTE_URL
+  return local
+```
+
+Local URL source precedence (reusing `port-mapping.md`): CLI flag, then `ACR_DAEMON_URL`, then `~/.acr/ports.json`, then
+the default `http://127.0.0.1:20443`. The override is `--mode` or `ACR_MCP_MODE=local|remote`. **No variable selects the
+remote URL.** A dev or staging host, if one exists, is a separate compiled-in allowlist entry shipped in a release,
+never an environment variable (*Confirm* whether a staging host is needed).
+
+Validation, enforced identically in every language:
+
+| | Remote | Local |
+|---|---|---|
+| Scheme | `https` only | `http` only |
+| Host | exactly `mcp.agentchatrooms.dev` (case-insensitive, no trailing dot) | `localhost` (pinned to `127.0.0.1`), `127.0.0.1`, or `::1` |
+| Port | empty or `443` | `1024-65535`, default `20443` |
+| Path | exactly `/mcp` | empty or `/` |
+| Userinfo, query, fragment | rejected | rejected |
+| Redirects | **never followed**; a `3xx` is an error | never followed |
+| TLS errors | hard fail; no insecure override | n/a |
+
+Rejected inputs the vectors must cover: `mcp.agentchatrooms.dev.evil.com`, `mcp.agentchatrooms.dev@evil.com`,
+`user:pw@` forms, `:8443`, `/mcp/`, `/%6dcp`, `?next=//evil.com`, `//host/mcp`, `0.0.0.0`, LAN addresses,
+`localhost.evil.com`, `127.0.0.1.evil.com`, `2130706433`, `0x7f.0.0.1`, `127.1`, `[::ffff:127.0.0.1]`, and `http://`
+for remote.
+
+### 5.4 Entitlement signals
+
+| Signal | Use | Trust |
+|---|---|---|
+| `scope` in the OAuth token response | Pick `remote` vs `local` at login time | Routing hint |
+| `401` / `403 insufficient_scope` from the gateway | Re-auth, or stop and show an upgrade message | **Authoritative** |
+| `acr_container_status` (tier, quota, rate limit, sandbox TTL) | Display only | Informational; response shape *Confirm* |
+
+Do not decode the access token locally to read a tier. Its format is private and may change (*Confirm*). Cache the
+result as `{mode, scopes, checkedAt}` with a TTL no longer than the token's lifetime, and negative-cache a `403` for
+about 60 seconds so a lapsed account does not hammer the gateway.
+
+### 5.5 Credentials
+
+- **Preferred:** let the MCP host do OAuth (Claude Code, Claude Desktop, Cursor and ChatGPT are understood to support
+  remote MCP with OAuth; *Confirm* per client and version). The generated config contains the pinned URL and **no secret**. ACR code never handles a token.
+- **When ACR must hold a token** (for example `acr` CLI features): OAuth 2.1 authorization code with PKCE `S256`,
+  loopback redirect `http://127.0.0.1:<ephemeral>/callback` (RFC 8252) or device code on headless hosts. Discover via
+  RFC 9728, then authorization-server metadata. Send the `resource` parameter (RFC 8707) and verify the metadata's
+  `resource` equals the pinned URL before sending any token. Request only `acr:rooms acr:cloud:pro`, and only when the
+  user opts in; free users are never prompted.
+- **Storage:** macOS Keychain, Windows Credential Manager, or libsecret. If none exists, refuse and tell the user; do not
+  fall back to a plaintext file. Never put the token in `ports.json`, the daemon's database, argv, a URL, a log, or a
+  child process environment.
+- **Two credentials, never interchangeable:** the local API token (section 7, never leaves the machine) and the Cloud
+  token (audience is the remote gateway only, never sent to `127.0.0.1`).
+- `acr logout` deletes the keychain item and revokes the refresh token if the server supports it (*Confirm*).
+- Do not use `${user_config.*}` to collect the token for the Claude plugin. Use the host's remote-server OAuth.
+
+### 5.6 Failure semantics
+
+| Condition | Behaviour |
+|---|---|
+| No credential, or `scope` lacks `acr:cloud:pro` | Local. No prompt |
+| `401 invalid_token`, refresh succeeds | Retry once, silently |
+| `401`, refresh fails | Stay on remote, report "sign in again". **Do not** reroute to local |
+| `403 insufficient_scope` | Stop. Show "your plan does not include Cloud MCP" with the upgrade/step-up link from the challenge. Do not resend the token. Negative-cache |
+| Timeout, `5xx`, network error | Error naming the endpoint. Exponential backoff with jitter, at most 3 tries, circuit breaker. No auto-failover |
+| `3xx` | Error (possible redirect attack) |
+| TLS failure | Hard error |
+| Subscription lapses | `403` flips the resolver to local for the next session and prints "Cloud MCP paused; local MCP unchanged" |
+
+Document that **local and cloud rooms are separate stores.** Switching tiers does not migrate room state, and users
+must be told so at the moment of switching (*Confirm* whether a migration path is planned).
+
+### 5.7 Tool-surface policy
+
+Keep two server names and let the host namespace the tools (`mcp__acr__chat_*`, `mcp__acr-remote__acr_*`). Do not
+add a `chat.*` ↔ `acr_*` translation layer in v1. Consequences to handle:
+
+- Agent `tools:` allowlists in plugins must name the server they use. The Claude plugin's agents currently use dotted
+  names; follow-up in section 11.
+- If a unified surface is wanted later, make it an explicit, versioned mapping table in `acr-docs`, owned by the
+  gateway team, with contract tests on both sides.
+
+For the Claude plugin, offer remote as an **opt-in** (`claude mcp add --transport http acr-remote
+https://mcp.agentchatrooms.dev/mcp`, as the README already says) rather than bundling an unauthenticated remote entry
+that free users would see failing. A product alternative is a second, remote-only "ACR Cloud" plugin so that
+"which plugin is installed" is the tier switch with zero runtime logic. That is a product decision; *Confirm*.
+
+## 6. Step-by-step implementation
+
+Work in the order below. Each phase is independently shippable and should be its own PR in its own repo.
+
+### Phase 0: harden the daemon (`acr-core`) - gate for everything else
+
+See section 7. Do not start Phase 3 until this is merged.
+
+### Phase 1: specify (`acr-docs`)
+
+1. Add `docs/specs/mcp-endpoint-resolution.md` covering sections 5.3 to 5.6.
+2. Add `docs/specs/fixtures/endpoint-vectors.json` with every accept/reject case from 5.3 and the resolution table
+   from Appendix A. All implementations load this file in their tests.
+3. Cross-link from `remote-mcp.md` and `port-mapping.md`. State in `port-mapping.md` that the remote URL is
+   deliberately not configurable.
+
+### Phase 2: resolver package (`acr-core`)
+
+1. Add `pkg/mcpendpoint` using Appendix A as the starting point.
+2. Make `cmd/mcp-server` call `ValidateLocal` on `ACR_DAEMON_URL`, and use `NewHTTPClient` (no redirects).
+   Fail at startup with a clear message on an invalid URL instead of continuing.
+3. Run the shared vectors in `go test`.
+4. Remove the duplicated standalone `acr-mcp-server/main.go`, or make it import the package (finding C11).
+
+### Phase 3: login and provisioning (`acr-cli`)
+
+1. `acr login`: PKCE flow per 5.5; store in the OS keychain; print granted scopes.
+2. `acr logout`: delete and revoke.
+3. `acr mcp status`: print mode, endpoint, reason (`granted scopes include acr:cloud:pro`), and token expiry. Never
+   print the token. This is the "surface the active endpoint" requirement.
+4. `acr mcp install --client claude-code|claude-desktop|cursor`: always register the local server; add `acr-remote`
+   (pinned URL, no secret) only when the resolver says `remote`. Re-running it after a downgrade removes the remote
+   entry.
+5. Delete the plaintext fallback and the stub in `tunnel_command.dart` (finding C10), or replace it with a real
+   implementation that uses the same pinned-URL rules.
+6. Dart tests load the shared vectors.
+
+### Phase 4: SDKs and bridge (`acr-node`, `acr-bridge`)
+
+Only where they need to choose an endpoint. Port the resolver to TypeScript, load the shared vectors, and default to
+`http://127.0.0.1:20443`. Do not add token handling to the platform bridges.
+
+### Phase 5: client packaging (this repo, `acr-chatgpt-plugin`)
+
+- Claude plugin: fix the `8080` default (section 11), add a README pointer, keep the bundled bridge as the in-memory
+  reference. No credential config.
+- ChatGPT plugin: remote-only by design. Keep its URL equal to the pinned constant and add a test asserting that.
+
+### Phase 6: rollout
+
+1. Ship Phases 0-2 behind no flag (they only tighten behaviour).
+2. Ship Phase 3 as a beta command group. Because self-serve OAuth is still "rolling out", pre-release testing must use
+   an account provisioned through `support@agentchatrooms.dev`.
+3. Announce the `127.0.0.1` bind change in the changelog. Users who relied on LAN access must opt in with
+   `-allow-nonloopback`, which also requires local API auth.
+
+## 7. Daemon changes (`acr-core`)
+
+These are the only daemon changes required. None adds subscription logic.
+
+| # | Change | Where |
+|---|---|---|
+| D1 | Bind to `127.0.0.1` by default. Add `-bind` / `ACR_BIND`. Refuse a non-loopback bind unless `-allow-nonloopback` is set **and** local API auth is enabled | `cmd/daemon/main.go:105` |
+| D2 | Reject requests whose `Host` is not `localhost`, `127.0.0.1` or `::1` (DNS rebinding) | new middleware |
+| D3 | Replace `Access-Control-Allow-Origin: *` with an exact-match allowlist (`ACR_ALLOWED_ORIGINS`). Reject, server-side, any request carrying a non-allowlisted `Origin`. Apply the same rule to the SSE handler (`gateway.go:253`). Emit the PNA header only for allowlisted origins | `corsHeaders`, `handleSSE` |
+| D4 | Require `Authorization: Bearer <local token>` on every mutating route. Token is 256 random bits at `~/.acr/api-token` (mode `0600`), compared in constant time. Browsers get a short-lived session through the existing `/api/v1/auth/challenge` and `/verify` DID flow and the already-allowed `X-ACR-Session` header (*Confirm* design with the daemon owners) | `RegisterRoutes` |
+| D5 | Remove unauthenticated `POST`/`PUT` on `/api/v1/config/security`. Require D4 and a loopback peer, and ignore any request with an `Origin` header | `handleSecurityConfig` |
+| D6 | Make CORS and PNA default **off**; turn on only through D3's allowlist | `cmd/daemon/main.go:20-21` |
+| D7 | Keep `/healthz`, `/health`, `/api/v1/health` readable without a token, but add only non-sensitive fields. Optionally add `"mcp": {"local": true}` for diagnostics. Never add tier, token or a remote URL | health handlers |
+
+Reference sketches (compiled and tested; see Appendix A for the test table):
+
+```go
+bind := flag.String("bind", "127.0.0.1", "listen address; non-loopback needs -allow-nonloopback and local API auth")
+srv := &http.Server{Addr: net.JoinHostPort(*bind, strconv.Itoa(*portFlag)) /* ... */}
+
+func HostGuard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h, _, err := net.SplitHostPort(r.Host)
+		if err != nil {
+			h = strings.Trim(r.Host, "[]")
+		}
+		switch h {
+		case "localhost", "127.0.0.1", "::1":
+			next.ServeHTTP(w, r)
+		default:
+			http.Error(w, "forbidden host", http.StatusForbidden)
+		}
+	})
+}
+
+func OriginGuard(allowed map[string]bool, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if o := r.Header.Get("Origin"); o != "" {
+			if !allowed[o] {
+				http.Error(w, "forbidden origin", http.StatusForbidden)
+				return
+			}
+			w.Header().Set("Access-Control-Allow-Origin", o)
+			w.Header().Add("Vary", "Origin")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func RequireToken(token []byte, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if subtle.ConstantTimeCompare([]byte(got), token) != 1 {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="acr-local"`)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+```
+
+`OriginGuard` closes finding C5 even though the browser sends a "simple" request: a cross-origin `POST` still carries an
+`Origin` header, and the server now refuses it before the handler runs. It does not stop a non-browser local process,
+which is what D4 is for. Wire the guards in the order `HostGuard` → `OriginGuard` → `RequireToken` → handlers.
+
+## 8. Test plan
+
+| Layer | Test | Pass when |
+|---|---|---|
+| Resolver | Shared vectors: every accept/reject URL in 5.3 | Identical result in Go, Dart and TS |
+| Resolver | Mode table: no creds, `acr:rooms` only, `acr:cloud:pro` only, both, each override | Matches Appendix A table |
+| Resolver | Invalid local URL while remote is chosen | Still an error (no latent bad config) |
+| HTTP client | Server replies `302` to another host | Error; no second request is sent |
+| HTTP client | Remote presents an invalid or self-signed cert | Hard error, no override |
+| Contract | Against the gateway with a Community token | `403 insufficient_scope`, no fallback to local |
+| Contract | Expired token | `401`, one refresh attempt, then re-auth prompt |
+| Contract | Pro token | `200` on `initialize` and `tools/list` |
+| Credential | Run login/use/logout with debug logging and a canary token | Canary appears in no log, argv, env, file or URL |
+| Credential | Keychain unavailable | Refuses; writes no file |
+| Daemon | Table in Appendix A (Host, Origin, token) | All rows pass |
+| Daemon | Browser test: cross-origin `text/plain` `POST` to `/api/v1/config/security` from a non-allowlisted origin | `403`, config unchanged |
+| Daemon | Start with default flags | Listens on `127.0.0.1` only (`ss -ltn`) |
+| Transition | Upgrade then downgrade while a session is open | Endpoint shown in `acr mcp status` flips with an explicit message; no room data written to the wrong store |
+| Regression | Existing free-tier flows | Unchanged against a hardened daemon, using the local API token |
+
+## 9. Checklist
+
+- [ ] D1-D7 merged in `acr-core`; default `acr-daemon` listens only on loopback
+- [ ] `/api/v1/config/security` cannot be changed without the local token
+- [ ] `mcp-endpoint-resolution.md` and `endpoint-vectors.json` merged in `acr-docs`
+- [ ] `pkg/mcpendpoint` merged; `cmd/mcp-server` validates `ACR_DAEMON_URL` at startup
+- [ ] Standalone `acr-mcp-server` no longer carries a second copy of `main.go`
+- [ ] `acr login` / `logout` / `mcp status` / `mcp install` work against a provisioned Pro account
+- [ ] No code path sends a Cloud token to a host other than the pinned constant
+- [ ] No fallback between tiers on error (tests prove it)
+- [ ] `acr tunnel` stub and its plaintext-IP fallback removed
+- [ ] Claude plugin default port corrected to `20443`; ChatGPT plugin URL test added
+- [ ] Changelog entry for the loopback bind and local API token
+
+## 10. Open questions (owners of the private systems)
+
+1. How is the tier encoded for the client: `scope` in the token response only, or also a token claim or an
+   introspection endpoint? (This guide assumes `scope` only.)
+2. Timeline for self-serve OAuth consent, and whether device-code and loopback redirects are both registered.
+3. Is refresh-token rotation on, and is RFC 7009 revocation supported?
+4. Shape of `acr_container_status`, and whether it is safe to call on connect.
+5. Is there a staging host that clients may need, and how should it be allowlisted without an environment variable?
+6. Where should the resolver live long-term: `acr-core/pkg`, the CLI, or a published SDK?
+7. Does the gateway validate token audience against its own URL (RFC 8707)? Clients assume it does.
+8. Is there a planned migration path from local rooms to cloud rooms, or are they permanently separate?
+9. Which web origins legitimately need the daemon's CORS allowlist (D3)? The portal origin is not documented in the
+   public specs.
+10. Confirm the current MCP authorization and transport requirements (Origin validation for local HTTP servers,
+    resource indicators, no token passthrough) against the latest MCP specification revision.
+
+## 11. Follow-ups in this repository (not part of this change)
+
+- Change the `daemonUrl` default from `http://localhost:8080` to `http://127.0.0.1:20443` in
+  `.claude-plugin/plugin.json`, `scripts/acr-mcp-bridge.js` (`DEFAULT_DAEMON_URL`), `README.md` and `tests/`.
+- Agent `tools:` allowlists use dotted names (`chat.post`); hosts namespace MCP tools as
+  `mcp__<server>__<tool>`, and the Anthropic API tool-name pattern is `^[a-zA-Z0-9_-]{1,64}$`. Align names and
+  allowlists.
+- Keep the README statement that the bundled bridge is an isolated in-memory reference server. If it ever connects to
+  a real daemon, it must use `ValidateLocal` and send the local API token.
+
+Incidental, outside this scope: `acr-core` tracks built binaries (`acr-daemon.exe`, `dist/`, release tarballs) in git.
+
+## Appendix A: verified reference code
+
+The resolver and the guards in section 7 compiled with `go vet` and passed `go test` in a scratch module (Go 1.27;
+`acr-core`'s `go.mod` declares `go 1.26`, and the code uses only long-standing standard-library APIs). The tests caught
+one real bug during review: host comparison must be case-insensitive.
+
+`pkg/mcpendpoint/endpoint.go`:
+
+```go
+package mcpendpoint
+
+import (
+	"errors"
+	"net"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+)
+
+const (
+	// RemoteURL is compiled in. No flag, env var, file or server response may change it.
+	RemoteURL        = "https://mcp.agentchatrooms.dev/mcp"
+	DefaultLocalPort = 20443
+)
+
+type Mode string
+
+const (
+	Local  Mode = "local"
+	Remote Mode = "remote"
+)
+
+var requiredScopes = []string{"acr:rooms", "acr:cloud:pro"}
+
+// ValidateRemote accepts exactly RemoteURL after parsing, so lookalikes, userinfo,
+// alternate ports, queries and fragments are all rejected.
+func ValidateRemote(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return err
+	}
+	want, _ := url.Parse(RemoteURL)
+	if u.Scheme != "https" || u.User != nil || u.RawQuery != "" || u.Fragment != "" ||
+		u.Opaque != "" || u.ForceQuery {
+		return errors.New("remote: scheme, userinfo, query or fragment not allowed")
+	}
+	if !strings.EqualFold(u.Hostname(), want.Hostname()) || (u.Port() != "" && u.Port() != "443") ||
+		u.EscapedPath() != want.Path {
+		return errors.New("remote: host or path not allowlisted")
+	}
+	return nil
+}
+
+// ValidateLocal accepts only a loopback literal so a hosts-file or DNS answer cannot redirect it.
+func ValidateLocal(raw string) (string, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", err
+	}
+	if u.Scheme != "http" || u.User != nil || u.RawQuery != "" || u.Fragment != "" ||
+		(u.Path != "" && u.Path != "/") {
+		return "", errors.New("local: scheme, userinfo, path, query or fragment not allowed")
+	}
+	host := u.Hostname()
+	switch host {
+	case "localhost":
+		host = "127.0.0.1" // pin to the literal; never resolve the name
+	case "127.0.0.1", "::1": // exact literals only: no 127.1, decimal, hex or IPv4-mapped forms
+	default:
+		return "", errors.New("local: host must be localhost, 127.0.0.1 or ::1")
+	}
+	port := DefaultLocalPort
+	if p := u.Port(); p != "" {
+		n, err := strconv.Atoi(p)
+		if err != nil || n < 1024 || n > 65535 {
+			return "", errors.New("local: port must be 1024-65535")
+		}
+		port = n
+	}
+	return "http://" + net.JoinHostPort(host, strconv.Itoa(port)), nil
+}
+
+type Resolution struct {
+	Mode   Mode
+	URL    string
+	Reason string
+}
+
+// Resolve picks a mode. override is "", "local" or "remote" and selects the mode only.
+// scopes are the scopes the authorization server granted; they are a routing hint, because
+// the gateway enforces entitlement on every call.
+func Resolve(override string, scopes []string, localURL string) (Resolution, error) {
+	local, err := ValidateLocal(localURL)
+	if err != nil {
+		return Resolution{}, err
+	}
+	switch override {
+	case "local":
+		return Resolution{Local, local, "explicit override"}, nil
+	case "remote":
+		return Resolution{Remote, RemoteURL, "explicit override"}, nil
+	case "":
+	default:
+		return Resolution{}, errors.New("override must be local or remote")
+	}
+	if hasAll(scopes, requiredScopes) {
+		return Resolution{Remote, RemoteURL, "granted scopes include acr:cloud:pro"}, nil
+	}
+	return Resolution{Local, local, "no paid scope; default"}, nil
+}
+
+func hasAll(have, want []string) bool {
+	set := make(map[string]bool, len(have))
+	for _, s := range have {
+		set[s] = true
+	}
+	for _, w := range want {
+		if !set[w] {
+			return false
+		}
+	}
+	return true
+}
+
+// NewHTTPClient never follows redirects, so a 3xx cannot carry a bearer token to another origin.
+func NewHTTPClient() *http.Client {
+	return &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+}
+```
+
+Resolution table (also the `Resolve` unit test):
+
+| Case | Override | Granted scopes | Result |
+|---|---|---|---|
+| Free, no credential | none | none | `local` |
+| Community token | none | `acr:rooms` | `local` |
+| Partial scope | none | `acr:cloud:pro` only | `local` |
+| Paid | none | `acr:rooms acr:cloud:pro` | `remote` |
+| Paid user forces local | `local` | both | `local` |
+| Free user forces remote | `remote` | none | `remote` (gateway then returns `403`; no fallback) |
+| Invalid local URL, paid | none | both | error |
+| Unknown override | `cloud` | none | error |
+
+Daemon guard table (also the guard unit test):
+
+| Case | Host | Origin | Authorization | Expect |
+|---|---|---|---|---|
+| Local client | `127.0.0.1:20443` | none | valid | `204` |
+| IPv6 loopback | `[::1]:20443` | none | valid | `204` |
+| Allowlisted portal | `localhost:20443` | allowlisted | valid | `204` |
+| DNS rebinding | `evil.com:20443` | none | valid | `403` |
+| LAN host | `192.168.1.5:20443` | none | valid | `403` |
+| Web page, simple `POST` | `127.0.0.1:20443` | `https://evil.com` | none | `403` |
+| Web page holding a token | `127.0.0.1:20443` | `https://evil.com` | valid | `403` |
+| No token | `127.0.0.1:20443` | none | none | `401` |
+| Wrong token | `127.0.0.1:20443` | none | wrong | `401` |
+
+## Appendix B: commands to verify the findings
+
+Line numbers refer to the commits in the table at the top.
+
+```bash
+# C2, C3, C5: run in a clone of acr-core
+git clone --depth 1 https://github.com/Agentic-Chat-Rooms-Protocol/acr-core /tmp/acr-core && cd /tmp/acr-core
+grep -n 'Addr:' cmd/daemon/main.go                                   # all interfaces
+grep -n 'flag.Bool("cors"\|flag.Bool("pna"' cmd/daemon/main.go       # both default true
+sed -n 203,232p pkg/gateway/gateway.go                               # POST/PUT with no auth, no Content-Type check
+
+# C6: run from the root of this repository
+grep -rn '8080' .claude-plugin/plugin.json scripts/acr-mcp-bridge.js README.md
+```
