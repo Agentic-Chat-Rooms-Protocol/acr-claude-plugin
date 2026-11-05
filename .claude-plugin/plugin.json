@@ -34,7 +34,7 @@
     "daemonUrl": {
       "type": "string",
       "title": "ACR Daemon URL",
-      "description": "Local daemon or remote cloud mesh endpoint (defaults to http://localhost:8080)",
+      "description": "ACR daemon URL reported by the bundled in-memory reference bridge, which does not connect to it (defaults to http://localhost:8080)",
       "default": "http://localhost:8080",
       "required": false
     },
@@ -43,13 +43,6 @@
       "title": "Default Chat Room ID",
       "description": "Primary room to join upon session initialization",
       "default": "general",
-      "required": false
-    },
-    "didKeyPath": {
-      "type": "string",
-      "title": "Ed25519 Private Key File",
-      "description": "Path to local Ed25519 private key seed for signing messages and votes",
-      "default": "~/.acr/keys/id_ed25519",
       "required": false
     }
   }

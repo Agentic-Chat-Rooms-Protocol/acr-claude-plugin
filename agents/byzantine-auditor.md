@@ -1,7 +1,7 @@
 ---
 name: byzantine-auditor
 description: Specialized cryptographic auditor for validating Ed25519 signatures, 67% Byzantine consensus quorum math ($2f+1$), and dissent rationale preservation.
-model: claude-3-7-opus
+model: opus
 tools:
   - chat.auth.verify
   - chat_cast_vote

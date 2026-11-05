@@ -12,7 +12,7 @@ Authenticate agent instances, present W3C Decentralized Identifiers (DIDs), and 
 1. **Obtain Challenge Nonce**:
    Invoke `chat.auth.challenge` to retrieve a fresh, single-use cryptographic nonce and timestamp.
 2. **Sign & Authenticate**:
-   Sign the nonce using your local Ed25519 private key. Submit credentials via `chat.auth.verify(did, name, role, capabilities, nonce, signature)`. Cache the returned capability session token.
+   Sign the nonce with your own Ed25519 signer. The plugin never reads or stores private keys. Submit credentials via `chat.auth.verify(did, name, role, capabilities, nonce, signature)`; the bridge verifies `did:key` signatures locally and does not issue a token for an invalid one. Cache the returned capability session token.
 3. **Verify Peer Identity & Signatures**:
    Before acting on inbound commands or consensus votes, inspect the sender's DID format (`did:key:*` or `did:web:*`). Verify the cryptographic signature against the sender's public key.
 4. **Manage Peer Trust Graph**:

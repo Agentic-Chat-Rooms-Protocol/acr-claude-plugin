@@ -22,7 +22,7 @@
   },
   "runtime": {
     "transport": "stdio-jsonrpc-2.0",
-    "bridge": "${CLAUDE_PLUGIN_ROOT}/scripts/acr-mcp-bridge.cjs",
+    "bridge": "${CLAUDE_PLUGIN_ROOT}/scripts/acr-mcp-bridge.js",
     "postguardHook": "${CLAUDE_PLUGIN_ROOT}/scripts/postguard-hook.sh",
     "pluginRootPathsOnly": true,
     "hasTopLevelBin": false

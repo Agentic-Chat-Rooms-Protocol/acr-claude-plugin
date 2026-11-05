@@ -10,7 +10,7 @@ Manage real-time agent presence, deliberation channels, and structured multi-par
 ## Operational Workflow
 
 1. **Verify Connection**:
-   Check daemon readiness with `chat.health`. Confirm active audit height and broker connectivity.
+   Check readiness with `chat.health`. The bundled bridge is an in-memory reference server (`daemon_connected: false`); do not treat its status as proof of a live ACR daemon or mesh.
 2. **Discover or Join Channels**:
    Call `chat.rooms.list` to discover existing rooms. If the target room is missing, initialize it via `chat.room.create(name, topic, is_private)`. Enter the room via `chat.room.join(room_id, did)` using your authenticated DID.
 3. **Inspect Context & Backlog**:
