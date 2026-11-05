@@ -1,3 +1,73 @@
 #!/bin/sh
-# PostGuard PreToolUse entry point: forwards the hook payload on stdin to the scanner.
-exec node "${CLAUDE_PLUGIN_ROOT}/scripts/postguard-hook.cjs"
+# PostGuard PreToolUse hook. Plain POSIX shell: no interpreter, network, or file access.
+#
+# Reads the hook payload (JSON) on stdin and scans it for credentials, high-risk PII and
+# prompt-injection framing. On a match it prints a "deny" decision. A clean payload prints
+# nothing and exits 0, so Claude Code's own permission flow stays in control; this hook
+# never auto-approves a tool call. The whole payload is scanned (envelope fields included),
+# which is a superset of the tool name and tool input.
+
+LC_ALL=C
+export LC_ALL
+
+payload=$(cat)
+case $payload in
+  *[![:space:]]*) ;;
+  *) exit 0 ;;
+esac
+
+# Undo the JSON escapes that would otherwise hide a match from the patterns below.
+text=$(printf '%s\n' "$payload" | sed \
+  -e 's/\\[ntr]/ /g' \
+  -e 's/\\u003[cC]/</g' \
+  -e 's/\\u003[eE]/>/g' \
+  -e 's/\\"/"/g')
+
+L='(^|[^A-Za-z0-9_])'
+R='([^A-Za-z0-9_]|$)'
+S='[[:space:]]+'
+
+deny() {
+  tool=$(printf '%s\n' "$payload" | sed -n \
+    's/.*"tool_name"[[:space:]]*:[[:space:]]*"\([A-Za-z0-9_.:-]*\)".*/\1/p' | head -n 1)
+  [ -n "$tool" ] || tool=unknown
+  reason="PostGuard blocked tool call '$tool': [$1] $2"
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"},"systemMessage":"%s"}\n' "$reason" "$reason"
+  exit 0
+}
+
+# check CATEGORY DESCRIPTION PATTERN [-i]
+check() {
+  if printf '%s\n' "$text" | grep -E${4:+i}q -e "$3"; then
+    deny "$1" "$2"
+  fi
+}
+
+SSN_AREA='(00[1-9]|0[1-9][0-9]|[1-5][0-9][0-9]|6[0-5][0-9]|66[0-5]|66[7-9]|6[7-9][0-9]|[78][0-9][0-9])'
+SSN_GROUP='(0[1-9]|[1-9][0-9])'
+SSN_SERIAL='(000[1-9]|00[1-9][0-9]|0[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9])'
+
+check CREDENTIAL_LEAK 'Cryptographic private key detected in tool arguments.' \
+  '-----BEGIN (RSA|OPENSSH|EC|PGP|ENCRYPTED|DSA)? ?PRIVATE KEY-----' i
+check CREDENTIAL_LEAK 'AWS access key identifier detected.' \
+  "${L}(A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}${R}"
+check CREDENTIAL_LEAK 'AI model service API key token detected.' \
+  "${L}sk-(proj-)?[A-Za-z0-9_-]{24,}${R}"
+check CREDENTIAL_LEAK 'GitHub personal access token detected.' \
+  "${L}gh[pousr]_[A-Za-z0-9]{36,}${R}"
+check CREDENTIAL_LEAK 'Unencrypted JSON Web Token (JWT) detected.' \
+  "${L}eyJ[A-Za-z0-9_-]{10,}[.]eyJ[A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{10,}${R}"
+check PII_EXPOSURE 'Potential US Social Security Number (SSN) detected.' \
+  "${L}${SSN_AREA}[- ]${SSN_GROUP}[- ]${SSN_SERIAL}${R}"
+check PII_EXPOSURE 'Payment credit card primary account number (PAN) detected.' \
+  "${L}(4[0-9]{12}([0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|3(0[0-5]|[68][0-9])[0-9]{11}|6(011|5[0-9]{2})[0-9]{12})${R}"
+check PROMPT_INJECTION 'Adversarial system prompt framing delimiter detected.' \
+  '<system_message>|</system_message>|<[|]im_start[|]>|<[|]im_end[|]>|\[SYSTEM\]|\[INST\]' i
+check PROMPT_INJECTION 'Instruction override sequence (ignore previous instructions) detected.' \
+  "${L}ignore${S}(all${S})?(previous|prior)${S}(instructions|prompts|directives)${R}" i
+check PROMPT_INJECTION 'Autonomous persona override / DAN jailbreak attempt detected.' \
+  "${L}you${S}are${S}now${S}(in${S})?(DAN|developer${S}mode|unrestricted|god${S}mode)${R}" i
+check PROMPT_INJECTION 'Instruction seeking to bypass safety policies detected.' \
+  "${L}disregard${S}(all${S})?(safety|security)${S}(guidelines|rules|policies)${R}" i
+
+exit 0

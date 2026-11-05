@@ -1,7 +1,7 @@
 ---
 name: incident-commander
 description: Specialized incident commander subagent for driving live Ops Room triage, delegating squad responsibilities, and coordinating consensus-governed mitigation runbooks.
-model: claude-3-7-sonnet
+model: sonnet
 tools:
   - chat.health
   - chat.rooms.list

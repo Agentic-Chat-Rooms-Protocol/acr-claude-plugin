@@ -15,16 +15,46 @@
 const readline = require('readline');
 const crypto = require('crypto');
 
-// Parse CLI flags
+// Configuration comes from the plugin's userConfig via environment variables. The bridge never
+// reads key material or credentials, and it performs no network I/O of its own.
+const DEFAULT_DAEMON_URL = 'http://localhost:8080';
+
+// Echoed back to the model, so keep only scheme://host[:port]/path and drop any userinfo or query.
+function sanitizeUrl(raw, fallback) {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return fallback;
+    return u.origin + u.pathname.replace(/\/+$/, '');
+  } catch (err) {
+    return fallback;
+  }
+}
+
 const args = process.argv.slice(2);
-let daemonUrl = process.env.ACR_DAEMON_URL || 'http://localhost:8080';
+let daemonUrl = process.env.ACR_DAEMON_URL || DEFAULT_DAEMON_URL;
 let defaultRoom = process.env.ACR_DEFAULT_ROOM || 'general';
-let keyPath = process.env.ACR_KEY_PATH || '~/.acr/keys/id_ed25519';
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--daemon-url' && args[i + 1]) daemonUrl = args[++i];
   if (args[i] === '--default-room' && args[i + 1]) defaultRoom = args[++i];
-  if (args[i] === '--key-path' && args[i + 1]) keyPath = args[++i];
+}
+daemonUrl = sanitizeUrl(daemonUrl, DEFAULT_DAEMON_URL);
+defaultRoom = String(defaultRoom).slice(0, 128);
+
+// Resource limits keep a misbehaving caller from exhausting memory.
+const LIMITS = {
+  maxStringLength: 65536,
+  maxRooms: 1000,
+  maxMessagesPerRoom: 1000,
+  maxChallenges: 1000,
+  maxProposals: 1000,
+  maxHumanGates: 1000,
+  maxCapabilities: 32,
+  maxLabelLength: 64
+};
+
+function evictOldest(map, max) {
+  while (map.size >= max) map.delete(map.keys().next().value);
 }
 
 // Stateful In-Memory ACR Mesh Database
@@ -302,6 +332,85 @@ const TOOLS = [
   }
 ];
 
+const TOOL_BY_NAME = new Map(TOOLS.map(tool => [tool.name, tool]));
+
+// Validates tool arguments against the declared inputSchema so malformed calls return an
+// error result instead of throwing inside a handler.
+function validateArgs(schema, input) {
+  if (input === null || typeof input !== 'object' || Array.isArray(input)) {
+    return 'Tool arguments must be a JSON object.';
+  }
+  for (const key of schema.required || []) {
+    if (input[key] === undefined || input[key] === null) return `Missing required argument '${key}'.`;
+  }
+  for (const [key, spec] of Object.entries(schema.properties || {})) {
+    const value = input[key];
+    if (value === undefined) continue;
+    let ok;
+    switch (spec.type) {
+      case 'string': ok = typeof value === 'string' && value.length <= LIMITS.maxStringLength; break;
+      case 'number': ok = typeof value === 'number' && Number.isFinite(value); break;
+      case 'boolean': ok = typeof value === 'boolean'; break;
+      case 'array': ok = Array.isArray(value) && value.every(item => typeof item === 'string'); break;
+      case 'object': ok = value !== null && typeof value === 'object' && !Array.isArray(value) &&
+        JSON.stringify(value).length <= LIMITS.maxStringLength; break;
+      default: ok = true;
+    }
+    if (!ok) return `Invalid value for argument '${key}': expected ${spec.type}.`;
+    if (spec.enum && !spec.enum.includes(value)) {
+      return `Invalid value for argument '${key}': must be one of ${spec.enum.join(', ')}.`;
+    }
+  }
+  return null;
+}
+
+const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
+
+function base58Decode(text) {
+  let value = 0n;
+  for (const ch of text) {
+    const digit = BASE58_ALPHABET.indexOf(ch);
+    if (digit < 0) return null;
+    value = value * 58n + BigInt(digit);
+  }
+  let hex = value.toString(16);
+  if (hex.length % 2) hex = '0' + hex;
+  const leadingZeros = text.length - text.replace(/^1+/, '').length;
+  return Buffer.concat([Buffer.alloc(leadingZeros), value === 0n ? Buffer.alloc(0) : Buffer.from(hex, 'hex')]);
+}
+
+// did:key Ed25519 → public key (multibase base58btc, multicodec 0xed01 + 32 key bytes).
+function publicKeyFromDidKey(did) {
+  const match = /^did:key:z([1-9A-HJ-NP-Za-km-z]{40,64})$/.exec(did);
+  if (!match) return null;
+  const raw = base58Decode(match[1]);
+  if (!raw || raw.length !== 34 || raw[0] !== 0xed || raw[1] !== 0x01) return null;
+  return crypto.createPublicKey({
+    key: Buffer.concat([ED25519_SPKI_PREFIX, raw.subarray(2)]),
+    format: 'der',
+    type: 'spki'
+  });
+}
+
+function decodeSignature(text) {
+  if (/^[0-9a-fA-F]{128}$/.test(text)) return Buffer.from(text, 'hex');
+  if (!/^[A-Za-z0-9+/_-]+={0,2}$/.test(text)) return null;
+  const bytes = Buffer.from(text.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+  return bytes.length === 64 ? bytes : null;
+}
+
+function verifyNonceSignature(did, nonce, signature) {
+  try {
+    const publicKey = publicKeyFromDidKey(did);
+    const sig = decodeSignature(signature);
+    if (!publicKey || !sig) return false;
+    return crypto.verify(null, Buffer.from(nonce, 'utf8'), publicKey, sig);
+  } catch (err) {
+    return false;
+  }
+}
+
 function handleToolCall(name, args) {
   switch (name) {
     case 'chat.health':
@@ -327,9 +436,13 @@ function handleToolCall(name, args) {
       }));
 
     case 'chat.room.create': {
-      const id = args.name.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+      const id = args.name.toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 128);
+      if (!id) return { error: 'Room name must not be empty.' };
       if (state.rooms.has(id)) {
         return { error: `Room '${id}' already exists`, room: state.rooms.get(id) };
+      }
+      if (state.rooms.size >= LIMITS.maxRooms) {
+        return { error: `Room limit (${LIMITS.maxRooms}) reached.` };
       }
       const room = {
         id,
@@ -369,12 +482,13 @@ function handleToolCall(name, args) {
         timestamp: Math.floor(Date.now() / 1000)
       };
       msgs.push(msg);
+      if (msgs.length > LIMITS.maxMessagesPerRoom) msgs.shift();
       return { status: 'SENT', message: msg };
     }
 
     case 'chat.history.fetch': {
       const msgs = state.messages.get(args.room_id) || [];
-      const limit = Math.min(args.limit || 50, 100);
+      const limit = Math.max(1, Math.min(Math.floor(args.limit || 50), 100));
       return msgs.slice(-limit);
     }
 
@@ -403,6 +517,10 @@ function handleToolCall(name, args) {
     case 'chat.auth.challenge': {
       const nonce = crypto.randomBytes(16).toString('hex');
       const now = Date.now();
+      for (const [key, entry] of state.challenges) {
+        if (entry.expiresAt < now) state.challenges.delete(key);
+      }
+      evictOldest(state.challenges, LIMITS.maxChallenges);
       state.challenges.set(nonce, { timestamp: now, expiresAt: now + 120000 });
       return { nonce, expires_in: 120, algorithm: 'Ed25519' };
     }
@@ -412,14 +530,24 @@ function handleToolCall(name, args) {
       if (!challenge || Date.now() > challenge.expiresAt) {
         return { verified: false, error: 'Challenge nonce missing or expired.' };
       }
+      // A nonce is single-use whether or not the signature checks out.
       state.challenges.delete(args.nonce);
+      if (!args.did.startsWith('did:key:')) {
+        return { verified: false, error: 'Unsupported DID method: only did:key can be verified locally; did:web needs resolution by the ACR daemon.' };
+      }
+      if (!verifyNonceSignature(args.did, args.nonce, args.signature)) {
+        return { verified: false, error: 'Ed25519 signature over the nonce did not verify for this DID.' };
+      }
       const sessionToken = 'acr_tok_' + crypto.randomBytes(24).toString('hex');
+      const capabilities = (args.capabilities || ['chat.basic'])
+        .slice(0, LIMITS.maxCapabilities)
+        .map(cap => cap.slice(0, LIMITS.maxLabelLength));
       return {
         verified: true,
         did: args.did,
-        role: args.role || 'Participant',
+        role: (args.role || 'Participant').slice(0, LIMITS.maxLabelLength),
         session_token: sessionToken,
-        capabilities: args.capabilities || ['chat.basic'],
+        capabilities,
         issued_at: Math.floor(Date.now() / 1000)
       };
     }
@@ -455,6 +583,9 @@ function handleToolCall(name, args) {
 
       let prop = state.proposals.get(proposalId);
       if (!prop) {
+        if (state.proposals.size >= LIMITS.maxProposals) {
+          return { error: `Proposal limit (${LIMITS.maxProposals}) reached.` };
+        }
         prop = {
           id: proposalId,
           description: 'Autonomous action proposal ' + proposalId,
@@ -587,14 +718,19 @@ function handleToolCall(name, args) {
     }
 
     case 'acr_request_human_gate': {
+      // Fail closed: refuse new gates rather than evicting a pending one.
+      if (state.humanGates.size >= LIMITS.maxHumanGates) {
+        return { error: `Human gate limit (${LIMITS.maxHumanGates}) reached; resolve pending gates first.` };
+      }
       const gateId = 'gate_' + crypto.randomBytes(6).toString('hex');
+      const timeoutSec = Math.min(Math.max(Math.floor(args.timeout_sec || 300), 1), 86400);
       const gate = {
         gateId,
         action_hash: args.action_hash,
         description: args.description,
         risk_level: args.risk_level,
         status: 'PENDING_HUMAN_APPROVAL',
-        timeout_sec: args.timeout_sec || 300,
+        timeout_sec: timeoutSec,
         createdAt: Date.now()
       };
       state.humanGates.set(gateId, gate);
@@ -628,6 +764,11 @@ rl.on('line', line => {
   } catch (err) {
     const errResp = { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } };
     process.stdout.write(JSON.stringify(errResp) + '\n');
+    return;
+  }
+
+  if (request === null || typeof request !== 'object' || Array.isArray(request)) {
+    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Invalid Request' } }) + '\n');
     return;
   }
 
@@ -676,10 +817,27 @@ rl.on('line', line => {
   }
 
   if (method === 'tools/call') {
-    const toolName = params ? params.name : '';
-    const toolArgs = (params && params.arguments) || {};
+    const callParams = params !== null && typeof params === 'object' ? params : {};
+    const toolName = typeof callParams.name === 'string' ? callParams.name : '';
+    const toolArgs = callParams.arguments === undefined || callParams.arguments === null ? {} : callParams.arguments;
 
-    const toolResult = handleToolCall(toolName, toolArgs);
+    let toolResult;
+    const tool = TOOL_BY_NAME.get(toolName);
+    if (!tool) {
+      toolResult = { error: `Tool '${toolName}' not implemented.` };
+    } else {
+      const problem = validateArgs(tool.inputSchema, toolArgs);
+      if (problem) {
+        toolResult = { error: problem };
+      } else {
+        try {
+          toolResult = handleToolCall(toolName, toolArgs);
+        } catch (err) {
+          toolResult = { error: `Tool '${toolName}' failed.` };
+        }
+      }
+    }
+
     const response = {
       jsonrpc: '2.0',
       id,

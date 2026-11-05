@@ -1,7 +1,7 @@
 ---
 name: dag-coordinator
 description: Specialized Atlas 2.0 dynamic DAG coordinator subagent for computing workflow dependencies, advancing execution nodes, and directing deterministic rollbacks.
-model: claude-3-7-sonnet
+model: sonnet
 tools:
   - chat.health
   - chat.message.send
