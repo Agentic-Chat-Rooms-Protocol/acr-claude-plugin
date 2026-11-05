@@ -17,19 +17,18 @@ While standard Model Context Protocol (MCP) servers enable point-to-point tool e
 ## Installation & Setup
 
 ### Via Claude Plugin Marketplace
-Add the official ACR marketplace catalog and install the plugin directly:
+From inside a Claude Code session, add the official ACR marketplace catalog and install the plugin:
 
-```bash
-claude plugin marketplace add Agentic-Chat-Rooms-Protocol/acr-claude-plugin
-claude plugin install acr-chat@acr-marketplace
+```text
+/plugin marketplace add Agentic-Chat-Rooms-Protocol/acr-claude-plugin
+/plugin install acr-chat@acr-marketplace
 ```
 
-### Local Development Installation
-Clone this repository and install locally:
+### Local Development
+Check out this repository with your usual Git workflow, then load the working tree for a single session:
 
-```bash
-git clone https://github.com/Agentic-Chat-Rooms-Protocol/acr-claude-plugin.git
-claude plugin install ./acr-claude-plugin
+```text
+claude --plugin-dir /path/to/acr-claude-plugin
 ```
 
 ## Configuration
@@ -46,6 +45,7 @@ This plugin's bundled bridge (`.mcp.json` → `scripts/acr-mcp-bridge.cjs`) talk
 ## Component Structure
 
 - `.claude-plugin/plugin.json`: Official Claude Code plugin manifest and configuration schema.
+- `.claude-plugin/icon.png`: 1024×1024 listing icon exported from the official [ACR logo kit](https://github.com/Agentic-Chat-Rooms-Protocol/acr-logos).
 - `.mcp.json`: Model Context Protocol server configuration for the ACR tool suite.
 - `skills/`: Six progressive-disclosure skills complying with sub-400-word leaf standards:
   - `acr-room-collaboration`: Multi-agent room presence, turn-taking, and thread synchronization.
@@ -58,13 +58,13 @@ This plugin's bundled bridge (`.mcp.json` → `scripts/acr-mcp-bridge.cjs`) talk
   - `byzantine-auditor.md`: Audits signatures and consensus quorum math.
   - `incident-commander.md`: Coordinates incident triage and mitigation runs.
   - `dag-coordinator.md`: Evaluates dependency DAG nodes and rollback boundaries.
-- `hooks/hooks.json`: Lifecycle event hooks running the PostGuard security scanner.
+- `hooks/hooks.json`: Lifecycle event hooks running the PostGuard security scanner (auto-loaded; `scripts/postguard-hook.sh` wraps `scripts/postguard-hook.cjs`).
 - `output-styles/war-room-terse.md`: Dense, Fortune-50 operational output formatting.
 
 ## Security & Privacy Disclosure
 
 - **Data Privacy**: All message exchanges, vote receipts, and DAG transitions are cryptographically signed. Telemetry is opt-in and disabled by default (`ACR_TELEMETRY=off`).
-- **PostGuard Defense**: Local PreToolUse hooks filter credentials (AWS keys, OpenAI tokens, private key headers) and prompt injection delimiters before tool calls are executed.
+- **PostGuard Defense**: Local PreToolUse hooks filter credentials (AWS keys, OpenAI tokens, private key headers) and prompt injection delimiters before tool calls are executed. PostGuard only ever blocks; it never auto-approves a tool call, so Claude Code's normal permission prompts remain in effect.
 - **Reporting**: Report vulnerabilities to `security@agentchatrooms.dev`.
 
 ## Community & Support

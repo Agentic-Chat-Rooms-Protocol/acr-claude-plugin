@@ -3,18 +3,12 @@
     "acr-server": {
       "command": "node",
       "args": [
-        "./scripts/acr-mcp-bridge.cjs",
-        "--daemon-url",
-        "${userConfig.daemonUrl}",
-        "--default-room",
-        "${userConfig.defaultRoom}",
-        "--key-path",
-        "${userConfig.didKeyPath}"
+        "${CLAUDE_PLUGIN_ROOT}/scripts/acr-mcp-bridge.cjs"
       ],
       "env": {
-        "ACR_DAEMON_URL": "${userConfig.daemonUrl}",
-        "ACR_DEFAULT_ROOM": "${userConfig.defaultRoom}",
-        "ACR_KEY_PATH": "${userConfig.didKeyPath}",
+        "ACR_DAEMON_URL": "${user_config.daemonUrl}",
+        "ACR_DEFAULT_ROOM": "${user_config.defaultRoom}",
+        "ACR_KEY_PATH": "${user_config.didKeyPath}",
         "ACR_LOG_LEVEL": "info",
         "ACR_TELEMETRY": "off",
         "ACR_NPM_ORG": "@acr-js"

@@ -61,9 +61,14 @@ runTest('Manifest .claude-plugin/plugin.json validity and required fields', () =
 
   // Verify relative paths use ./ syntax
   assert(manifest.mcpServers.startsWith('./'), 'mcpServers must use ./ relative path');
-  assert(manifest.hooks.startsWith('./'), 'hooks must use ./ relative path');
   assert(manifest.skills.every(s => s.startsWith('./')), 'skills must use ./ relative paths');
   assert(manifest.agents.every(a => a.startsWith('./')), 'agents must use ./ relative paths');
+  assert(manifest.agents.every(a => a.endsWith('.md')), 'every agents[] entry must be a .md file, not a folder');
+  for (const a of manifest.agents) {
+    const st = fs.lstatSync(path.join(PLUGIN_ROOT, a));
+    assert(st.isFile() && !st.isSymbolicLink(), `${a} must be a regular file`);
+  }
+  assert(!('hooks' in manifest), 'plugin.json must not re-list hooks/hooks.json (auto-loaded; duplicate hooks error)');
 
   // Verify userConfig
   assert(manifest.userConfig && manifest.userConfig.daemonUrl, 'userConfig.daemonUrl must exist');
@@ -84,15 +89,52 @@ runTest('marketplace.json distribution manifests', () => {
   assert.strictEqual(mpData.plugins[0].license, 'Apache-2.0');
 });
 
+// 2b. Listing icon
+runTest('.claude-plugin/icon.png is a square PNG, 512-2048 px, under 2 MB', () => {
+  const iconPath = path.join(PLUGIN_ROOT, '.claude-plugin', 'icon.png');
+  const buf = fs.readFileSync(iconPath);
+  assert(buf.length < 2 * 1024 * 1024, 'icon must be under 2 MB');
+  assert(buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), 'icon must be a real PNG');
+  const width = buf.readUInt32BE(16);
+  const height = buf.readUInt32BE(20);
+  assert.strictEqual(width, height, `icon must be square (got ${width}x${height})`);
+  assert(width >= 512 && width <= 2048, `icon side must be 512-2048 px (got ${width})`);
+});
+
+// 2c. Plugin tree hygiene (no symlinks, no opaque archives, size caps)
+runTest('Plugin tree has no symlinks or binary archives and stays under the size cap', () => {
+  const MAX_BYTES = 2 * 1024 * 1024;
+  const SKIP = new Set(['.git', 'node_modules', 'dist']);
+  (function walk(dir) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (SKIP.has(entry.name)) continue;
+      const full = path.join(dir, entry.name);
+      assert(!entry.isSymbolicLink(), `Symlink not allowed: ${full}`);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else {
+        assert(!/\.(zip|tgz|gz|tar|jar|exe|dll|so|wasm)$/i.test(entry.name), `Opaque binary not allowed: ${full}`);
+        assert(fs.statSync(full).size <= MAX_BYTES, `File exceeds size cap: ${full}`);
+      }
+    }
+  })(PLUGIN_ROOT);
+});
+
 // 3. .mcp.json
-runTest('.mcp.json MCP server configuration with relative paths', () => {
+runTest('.mcp.json MCP server configuration uses literal ${CLAUDE_PLUGIN_ROOT} paths', () => {
   const mcpPath = path.join(PLUGIN_ROOT, '.mcp.json');
   assert(fs.existsSync(mcpPath), '.mcp.json must exist');
   const mcpConfig = JSON.parse(fs.readFileSync(mcpPath, 'utf8'));
 
   assert(mcpConfig.mcpServers && mcpConfig.mcpServers['acr-server'], 'acr-server must be declared');
   const srv = mcpConfig.mcpServers['acr-server'];
-  assert(srv.args.some(a => a.startsWith('./')), 'MCP server args must use ./ relative script path');
+  assert.strictEqual(srv.command, 'node', 'MCP server command must be the literal node binary');
+  assert.deepStrictEqual(srv.args, ['${CLAUDE_PLUGIN_ROOT}/scripts/acr-mcp-bridge.cjs'], 'MCP server args must be the literal ${CLAUDE_PLUGIN_ROOT} bridge path only');
+  assert(fs.existsSync(path.join(PLUGIN_ROOT, 'scripts', 'acr-mcp-bridge.cjs')), 'bridge script must exist');
+  for (const [key, value] of Object.entries(srv.env)) {
+    const refs = value.match(/\$\{[^}]+\}/g) || [];
+    assert(refs.every(r => r.startsWith('${user_config.')), `env ${key} may only reference \${user_config.*}`);
+  }
   assert.strictEqual(srv.env.ACR_NPM_ORG, '@acr-js', 'ACR_NPM_ORG must be @acr-js');
 });
 
@@ -173,7 +215,14 @@ runTest('hooks/hooks.json configuration', () => {
   const hooks = JSON.parse(fs.readFileSync(hookPath, 'utf8'));
   assert(hooks.hooks && hooks.hooks.PreToolUse, 'PreToolUse hook must be declared');
   const preHook = hooks.hooks.PreToolUse[0];
-  assert(preHook.hooks[0].command.includes('./scripts/postguard-hook.cjs'), 'Must point to postguard-hook.cjs with ./ relative path');
+  const cmd = preHook.hooks[0].command;
+  assert.strictEqual(cmd, '"${CLAUDE_PLUGIN_ROOT}/scripts/postguard-hook.sh"', 'Must run the shell wrapper by a literal ${CLAUDE_PLUGIN_ROOT} path');
+  const wrapperPath = path.join(PLUGIN_ROOT, 'scripts', 'postguard-hook.sh');
+  assert(fs.existsSync(wrapperPath), 'postguard-hook.sh must exist');
+  assert(fs.statSync(wrapperPath).mode & 0o111, 'postguard-hook.sh must be executable');
+  const wrapper = fs.readFileSync(wrapperPath, 'utf8');
+  assert(wrapper.startsWith('#!/bin/sh'), 'wrapper must be a plain POSIX shell script');
+  assert(wrapper.includes('"${CLAUDE_PLUGIN_ROOT}/scripts/postguard-hook.cjs"'), 'wrapper must run the scanner by a literal ${CLAUDE_PLUGIN_ROOT} path');
 });
 
 // 8. PostGuard Hook behavioral tests
@@ -234,6 +283,28 @@ runTest('PostGuard Hook: intercepts adversarial system message delimiters', () =
   });
   assert.strictEqual(result.passed, false, 'System message tag must be blocked');
   assert.strictEqual(result.category, 'PROMPT_INJECTION');
+});
+
+function runHook(payload) {
+  const { spawnSync } = require('child_process');
+  return spawnSync('sh', [path.join(PLUGIN_ROOT, 'scripts', 'postguard-hook.sh')], {
+    input: JSON.stringify(payload),
+    encoding: 'utf8',
+    env: { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT }
+  });
+}
+
+runTest('PostGuard Hook: clean payload yields no decision (never auto-approves)', () => {
+  const res = runHook({ tool_name: 'Bash', tool_input: { command: 'ls -la' } });
+  assert.strictEqual(res.status, 0);
+  assert.strictEqual(res.stdout.trim(), '', 'hook must not emit an allow decision');
+});
+
+runTest('PostGuard Hook: malicious payload is denied via the shell wrapper', () => {
+  const res = runHook({ tool_name: 'Bash', tool_input: { command: 'echo AKIAIOSFODNN7EXAMPLE' } });
+  assert.strictEqual(res.status, 0);
+  const out = JSON.parse(res.stdout);
+  assert.strictEqual(out.hookSpecificOutput.permissionDecision, 'deny');
 });
 
 // 9. Output style validation
