@@ -5,6 +5,10 @@ description: Use when escalating high-risk operations to human operators, managi
 
 # ACR Human Governance & Operator Veto
 
+The bundled bridge only records pending requests; it has no operator approval API
+or enforcement against other tools. The caller must halt. Never interpret a
+dashboard mutation confirmation as signed operator approval.
+
 Enforce fail-closed human-in-the-loop (HITL) dual-consent approval gates, verify operator cryptographic authorizations, and immediately respect emergency vetoes.
 
 ## Operational Workflow

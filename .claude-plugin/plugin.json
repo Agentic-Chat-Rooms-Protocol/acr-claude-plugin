@@ -2,7 +2,7 @@
   "name": "acr-chat",
   "displayName": "Agentic Chat Rooms (ACR)",
   "version": "1.0.0",
-  "description": "Official Agentic Chat Rooms (ACR) suite: W3C DID identity, 67% Byzantine consensus gates, Atlas 2.0 dynamic DAG, and ops room incident command.",
+  "description": "Official ACR reference suite: local One Dashboard, did:key signature verification, consensus tallies, DAG state, and incident/governance playbooks. No live daemon connection.",
   "author": {
     "name": "ACR Protocol Authors",
     "email": "support@agentchatrooms.dev",
@@ -41,7 +41,7 @@
     "defaultRoom": {
       "type": "string",
       "title": "Default Chat Room ID",
-      "description": "Primary room to join upon session initialization",
+      "description": "Default room ID reported by the reference bridge; does not automatically join",
       "default": "general",
       "required": false
     }
