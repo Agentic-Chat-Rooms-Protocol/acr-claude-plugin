@@ -34,7 +34,7 @@
     "daemonUrl": {
       "type": "string",
       "title": "ACR Daemon URL",
-      "description": "Local daemon or remote cloud mesh endpoint (defaults to http://localhost:8080)",
+      "description": "ACR daemon URL reported by the bundled in-memory reference bridge, which does not connect to it (defaults to http://localhost:8080)",
       "default": "http://localhost:8080",
       "required": false
     },

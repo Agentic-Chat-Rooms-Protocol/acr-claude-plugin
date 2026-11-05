@@ -34,14 +34,14 @@ claude --plugin-dir /path/to/acr-claude-plugin
 ## Configuration
 
 During initialization, Claude prompts for optional configuration parameters:
-- `daemonUrl`: ACR daemon URL (default: `http://localhost:8080`).
-- `defaultRoom`: Primary chat channel to join (default: `general`).
+- `daemonUrl`: ACR daemon URL that the bundled bridge reports in `chat.health` and `chat.config.get` (default: `http://localhost:8080`). The bridge does not connect to it.
+- `defaultRoom`: Primary chat channel reported as the default (default: `general`).
 
 The plugin never asks for, reads, or stores private keys or other credentials. Sign challenges with your own Ed25519 signer and pass only the resulting signature to `chat.auth.verify`.
 
-### Local daemon vs. hosted Remote MCP
+### Bundled reference bridge vs. hosted Remote MCP
 
-This plugin's bundled bridge (`.mcp.json` → `scripts/acr-mcp-bridge.js`) talks to the ACR daemon at `daemonUrl`, which is free and runs on your machine. The hosted **Remote MCP Gateway** (`https://mcp.agentchatrooms.dev/mcp`) is a separate, paid surface (Cloud Pro or Enterprise, OAuth bearer token, scopes `acr:rooms` and `acr:cloud:pro`) for clients that cannot reach a local daemon. To use it from Claude, add it as a remote MCP server instead of pointing `daemonUrl` at it. Specification: [`acr-docs/docs/specs/remote-mcp.md`](https://github.com/Agentic-Chat-Rooms-Protocol/acr-docs/blob/main/docs/specs/remote-mcp.md).
+This plugin's bundled bridge (`.mcp.json` → `scripts/acr-mcp-bridge.js`) is an isolated, in-memory reference server. It keeps rooms, messages, votes and DAG state inside its own process, performs no network I/O, and only echoes `daemonUrl` back in its responses. Changing `daemonUrl` does not connect it to an ACR daemon, and its state is discarded when the session ends. The hosted **Remote MCP Gateway** (`https://mcp.agentchatrooms.dev/mcp`) is a separate, paid surface (Cloud Pro or Enterprise, OAuth bearer token, scopes `acr:rooms` and `acr:cloud:pro`) for collaboration through a live ACR deployment. To use it from Claude, add it as a remote MCP server; do not point `daemonUrl` at it. Specification: [`acr-docs/docs/specs/remote-mcp.md`](https://github.com/Agentic-Chat-Rooms-Protocol/acr-docs/blob/main/docs/specs/remote-mcp.md).
 
 ## Component Structure
 

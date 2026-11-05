@@ -278,6 +278,33 @@ runTest('PostGuard Hook: JSON-escaped delimiters (\\u003c) cannot hide a match',
   assert.strictEqual(JSON.parse(res.stdout).hookSpecificOutput.permissionDecision, 'deny');
 });
 
+// Each escaped form must be denied with the same category as its plaintext equivalent.
+const ESCAPED_CASES = [
+  ['\\u0041 inside an AWS key', 'CREDENTIAL_LEAK', 'AKIAIOSFODNN7EXAMPLE', '\\u0041KIAIOSFODNN7EXAMPLE'],
+  ['\\u0049 in the middle of an AWS key', 'CREDENTIAL_LEAK', 'AKIAIOSFODNN7EXAMPLE', 'AKIA\\u0049OSFODNN7EXAMPLE'],
+  ['\\u002d in an API key prefix', 'CREDENTIAL_LEAK', 'sk-proj-1234567890abcdef1234567890abcdef', 'sk\\u002dproj-1234567890abcdef1234567890abcdef'],
+  ['\\u002d in an SSN', 'PII_EXPOSURE', '123-45-6789', '123\\u002d45\\u002d6789'],
+  ['upper-case hex in \\u003C \\u003E', 'PROMPT_INJECTION', '<system_message>', '\\u003Csystem_message\\u003E'],
+  ['escaped solidus in a closing tag', 'PROMPT_INJECTION', '</system_message>', '<\\/system_message>'],
+  ['\\u005b \\u005d around SYSTEM', 'PROMPT_INJECTION', '[SYSTEM]', '\\u005bSYSTEM\\u005d'],
+  ['\\u0020 between override words', 'PROMPT_INJECTION', 'ignore previous instructions', 'ignore\\u0020previous\\u0020instructions'],
+  ['decoded backslash and ampersand before a key', 'CREDENTIAL_LEAK', 'AKIAIOSFODNN7EXAMPLE', '\\u005c\\u0026\\u002f AKIAIOSFODNN7EXAMPLE']
+];
+
+for (const [label, category, plain, escaped] of ESCAPED_CASES) {
+  runTest(`PostGuard Hook: denies ${label} (same as plaintext)`, () => {
+    for (const content of [plain, null]) {
+      const raw = content !== null
+        ? JSON.stringify({ tool_name: 'chat.message.send', tool_input: { content } })
+        : `{"tool_name":"chat.message.send","tool_input":{"content":"${escaped}"}}`;
+      const res = runHook(null, raw);
+      assert.strictEqual(res.status, 0);
+      const reason = JSON.parse(res.stdout).hookSpecificOutput.permissionDecisionReason;
+      assert(reason.includes(`[${category}]`), `expected ${category} for ${content === null ? 'escaped' : 'plain'} form: ${res.stdout}`);
+    }
+  });
+}
+
 runTest('PostGuard Hook: malformed (non-JSON) input is still scanned, fail-closed', () => {
   const res = runHook(null, 'not json AKIAIOSFODNN7EXAMPLE');
   assert.strictEqual(res.status, 0);
@@ -294,7 +321,8 @@ const CLEAN_CASES = [
   { tool_name: 'Bash', tool_input: { command: 'ls -la' } },
   { tool_name: 'chat.message.send', tool_input: { room_id: 'general', sender_did: 'did:key:z6MkuV4ACRSystemGenesis1', content: 'Reviewing proposal #prop_99 for consensus deliberation.' } },
   { tool_name: 'Read', tool_input: { file_path: '/home/u/notes.txt' }, session_id: '6c1e2f3a-1111-4222-8333-444455556666' },
-  { tool_name: 'x', tool_input: { content: 'SSN-like but invalid: 000-12-3456, 666-45-6789, 900-12-3456, 123-00-4567, 123-45-0000' } }
+  { tool_name: 'x', tool_input: { content: 'SSN-like but invalid: 000-12-3456, 666-45-6789, 900-12-3456, 123-00-4567, 123-45-0000' } },
+  { tool_name: 'Bash', tool_input: { command: 'echo \u001b[0m caf\u00e9 \\u0041KIA a\u003cb\u003e \u0026' } }
 ];
 
 CLEAN_CASES.forEach((payload, i) => {
@@ -544,9 +572,11 @@ function runBridgeSession(env, steps) {
         return;
       }
       const step = steps[results.length];
-      const req = typeof step === 'function' ? step(results) : step;
-      pendingId = nextId++;
-      proc.stdin.write((typeof req === 'string' ? req : JSON.stringify({ jsonrpc: '2.0', id: pendingId, ...req })) + '\n');
+      // A step may return a Promise (for example to wait before sending).
+      Promise.resolve(typeof step === 'function' ? step(results) : step).then(req => {
+        pendingId = nextId++;
+        proc.stdin.write((typeof req === 'string' ? req : JSON.stringify({ jsonrpc: '2.0', id: pendingId, ...req })) + '\n');
+      }, reject);
     }
 
     proc.on('exit', () => {
@@ -659,6 +689,38 @@ async function testBridgeHardening() {
     assert.strictEqual(toolData(results[4]).length, 1, 'negative limit clamps to 1');
     assert.strictEqual(toolData(results[5]).length, 3, 'huge limit clamps to the 100 cap');
     assert.strictEqual(toolData(results[6]).timeout_sec, 86400, 'gate timeout is clamped');
+  });
+
+  await runAsyncTest('Bridge: deeply nested arguments are rejected without crashing the server', async () => {
+    const depth = 9000; // fits under the size cap, but used to overflow while serialising the reply
+    const nested = '{"a":'.repeat(depth) + '1' + '}'.repeat(depth);
+    const raw = '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"chat.message.send","arguments":' +
+      '{"room_id":"general","sender_did":"d","content":"c","attachment":' + nested + '}}}';
+    const results = await runBridgeSession({}, [raw, callTool('chat.health', {})]);
+    assert(/nested deeper/.test(toolData(results[0]).error), 'deep nesting must be refused with an error');
+    assert.strictEqual(toolData(results[1]).status, 'UP', 'server must survive');
+  });
+
+  await runAsyncTest('Bridge: chat.health does not claim a daemon connection or report fabricated metrics', async () => {
+    const results = await runBridgeSession({}, [callTool('chat.health', {})]);
+    const health = toolData(results[0]);
+    assert.strictEqual(health.daemon_connected, false);
+    assert.strictEqual(health.mode, 'in-memory-reference');
+    for (const fabricated of ['audit_block_height', 'connected_agents', 'latency_ms', 'mesh']) {
+      assert(!(fabricated in health), `health must not report simulated '${fabricated}'`);
+    }
+  });
+
+  await runAsyncTest('Bridge: human gates are fail-closed at the cap and reclaimed after their deadline', async () => {
+    const gate = () => callTool('acr_request_human_gate', { action_hash: 'h', description: 'd', risk_level: 'HIGH', timeout_sec: 1 });
+    const steps = [];
+    for (let i = 0; i < 1000; i++) steps.push(gate());
+    steps.push(gate());
+    steps.push(() => new Promise(resolve => setTimeout(() => resolve(gate()), 1200)));
+    const results = await runBridgeSession({}, steps);
+    assert(toolData(results[999]).gateId, 'gate 1000 must be accepted');
+    assert(/limit/i.test(toolData(results[1000]).error), 'gate 1001 must be refused while 1000 are pending');
+    assert(toolData(results[1001]).gateId, 'expired gates must be reclaimed so new gates are accepted');
   });
 
   runTest('Bridge source: no filesystem, network, or process APIs, and no key handling', () => {

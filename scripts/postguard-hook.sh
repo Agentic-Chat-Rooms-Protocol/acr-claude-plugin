@@ -16,12 +16,32 @@ case $payload in
   *) exit 0 ;;
 esac
 
-# Undo the JSON escapes that would otherwise hide a match from the patterns below.
+# Undo JSON string escapes so an escaped form cannot hide a match from the patterns below:
+# \n \t \r \b \f become spaces, \/ and \" become plain characters, and \u00XX escapes of
+# printable ASCII are decoded to the character they stand for.
 text=$(printf '%s\n' "$payload" | sed \
-  -e 's/\\[ntr]/ /g' \
-  -e 's/\\u003[cC]/</g' \
-  -e 's/\\u003[eE]/>/g' \
+  -e 's/\\[ntrbf]/ /g' \
+  -e 's/\\\//\//g' \
   -e 's/\\"/"/g')
+
+if printf '%s\n' "$text" | grep -Eq '\\u00[2-7][0-9A-Fa-f]'; then
+  nl='
+'
+  script=
+  code=32
+  while [ "$code" -le 126 ]; do
+    ch=$(printf "\\$(printf '%03o' "$code")")
+    case $ch in
+      '\'|'&'|'/') ch="\\$ch" ;;
+    esac
+    lower=$(printf '%02x' "$code")
+    upper=$(printf '%02X' "$code")
+    script="${script}s/\\\\u00${lower}/${ch}/g${nl}"
+    [ "$upper" = "$lower" ] || script="${script}s/\\\\u00${upper}/${ch}/g${nl}"
+    code=$((code + 1))
+  done
+  text=$(printf '%s\n' "$text" | sed -e "$script")
+fi
 
 L='(^|[^A-Za-z0-9_])'
 R='([^A-Za-z0-9_]|$)'

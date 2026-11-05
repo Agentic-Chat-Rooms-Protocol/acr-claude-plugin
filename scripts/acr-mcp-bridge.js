@@ -334,11 +334,28 @@ const TOOLS = [
 
 const TOOL_BY_NAME = new Map(TOOLS.map(tool => [tool.name, tool]));
 
+const MAX_ARG_DEPTH = 8;
+
+// Iterative on purpose: a recursive walk (or JSON.stringify) on hostile input can overflow the stack.
+function exceedsDepth(value, maxDepth) {
+  const stack = [[value, 1]];
+  while (stack.length) {
+    const [node, depth] = stack.pop();
+    if (node === null || typeof node !== 'object') continue;
+    if (depth > maxDepth) return true;
+    for (const child of Object.values(node)) stack.push([child, depth + 1]);
+  }
+  return false;
+}
+
 // Validates tool arguments against the declared inputSchema so malformed calls return an
 // error result instead of throwing inside a handler.
 function validateArgs(schema, input) {
   if (input === null || typeof input !== 'object' || Array.isArray(input)) {
     return 'Tool arguments must be a JSON object.';
+  }
+  if (exceedsDepth(input, MAX_ARG_DEPTH)) {
+    return `Tool arguments are nested deeper than ${MAX_ARG_DEPTH} levels.`;
   }
   for (const key of schema.required || []) {
     if (input[key] === undefined || input[key] === null) return `Missing required argument '${key}'.`;
@@ -416,12 +433,10 @@ function handleToolCall(name, args) {
     case 'chat.health':
       return {
         status: 'UP',
-        mesh: 'ACR-NATS-JetStream-Embedded',
+        mode: 'in-memory-reference',
+        daemon_connected: false,
         protocol_version: '2.1.0',
-        audit_block_height: 48921,
         active_rooms: state.rooms.size,
-        connected_agents: 6,
-        latency_ms: 1.4,
         consensus_engine: 'BFT-67%-Quorum',
         endpoint: daemonUrl
       };
@@ -718,9 +733,14 @@ function handleToolCall(name, args) {
     }
 
     case 'acr_request_human_gate': {
-      // Fail closed: refuse new gates rather than evicting a pending one.
+      // Fail closed: never evict a pending gate to make room. Gates past their deadline are
+      // reclaimed first, so the limit cannot lock the tool out for the rest of the session.
+      const now = Date.now();
+      for (const [key, existing] of state.humanGates) {
+        if (now >= existing.createdAt + existing.timeout_sec * 1000) state.humanGates.delete(key);
+      }
       if (state.humanGates.size >= LIMITS.maxHumanGates) {
-        return { error: `Human gate limit (${LIMITS.maxHumanGates}) reached; resolve pending gates first.` };
+        return { error: `Human gate limit (${LIMITS.maxHumanGates}) reached; wait for pending gates to reach their deadline.` };
       }
       const gateId = 'gate_' + crypto.randomBytes(6).toString('hex');
       const timeoutSec = Math.min(Math.max(Math.floor(args.timeout_sec || 300), 1), 86400);
@@ -826,16 +846,21 @@ rl.on('line', line => {
     if (!tool) {
       toolResult = { error: `Tool '${toolName}' not implemented.` };
     } else {
-      const problem = validateArgs(tool.inputSchema, toolArgs);
-      if (problem) {
-        toolResult = { error: problem };
-      } else {
-        try {
-          toolResult = handleToolCall(toolName, toolArgs);
-        } catch (err) {
-          toolResult = { error: `Tool '${toolName}' failed.` };
-        }
+      try {
+        const problem = validateArgs(tool.inputSchema, toolArgs);
+        toolResult = problem ? { error: problem } : handleToolCall(toolName, toolArgs);
+      } catch (err) {
+        toolResult = { error: `Tool '${toolName}' failed.` };
       }
+    }
+
+    // Serialisation can still fail (for example on an oversized result); never let that kill the server.
+    let text;
+    try {
+      text = JSON.stringify(toolResult, null, 2);
+    } catch (err) {
+      toolResult = { error: `Tool '${toolName}' produced a result that could not be serialized.` };
+      text = JSON.stringify(toolResult, null, 2);
     }
 
     const response = {
@@ -845,7 +870,7 @@ rl.on('line', line => {
         content: [
           {
             type: 'text',
-            text: JSON.stringify(toolResult, null, 2)
+            text
           }
         ],
         isError: Boolean(toolResult && toolResult.error)
