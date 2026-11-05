@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>ACR / Control Room</title>
+  <link rel="icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to workspace</a>
+  <aside class="sidebar" aria-label="Workspace navigation">
+    <a class="brand" href="#main"><span class="brand-mark" aria-hidden="true">A</span><span>ACR<span class="brand-caption">CONTROL ROOM</span></span></a>
+    <div class="workspace-label"><span class="status-dot"></span> Local reference <span class="tag">LOCAL</span></div>
+    <nav id="categories" aria-label="Capabilities"></nav>
+    <label class="search-label" for="tool-search">FIND A TOOL</label>
+    <input id="tool-search" type="search" placeholder="Search capabilities..." autocomplete="off">
+    <div id="tool-list" class="tool-list" aria-label="Available tools"></div>
+    <p class="sidebar-note">One process. One tool surface.<br>No external services or telemetry.</p>
+  </aside>
+  <main id="main" tabindex="-1">
+    <header class="topbar"><span>WORKSPACE <span class="slash">/</span> CONTROL ROOM</span><span class="connection"><span class="status-dot"></span> <span id="connection">Connecting</span></span></header>
+    <section class="hero" aria-labelledby="page-title">
+      <div><p class="eyebrow">AGENTIC CHAT ROOMS</p><h1 id="page-title">Clarity across the mesh.</h1><p class="subtitle">A single workspace for deliberation, identity and orchestration.</p></div>
+      <button id="refresh" class="secondary" type="button">Refresh overview <span aria-hidden="true">&#8635;</span></button>
+    </section>
+    <div class="notice"><span class="notice-icon" aria-hidden="true">i</span><p><strong>Reference environment, not a live deployment.</strong> Seeded, in-memory state disappears on exit. DIDs are caller-supplied; private rooms, consensus and human gates do not enforce production authorization. Browser calls use PostGuard, but messages are unsigned and AST verification is unavailable.</p></div>
+    <p id="status" role="status" aria-live="polite">Loading the shared tool registry...</p>
+    <section class="metrics" aria-label="Reference workspace summary">
+      <article class="metric"><span>LOCAL ROOMS</span><strong id="room-count">--</strong><small>Seeded + session-created</small></article>
+      <article class="metric"><span>EQUAL TOOL SURFACES</span><strong id="tool-count">--</strong><small>Same registry as Claude MCP</small></article>
+      <article class="metric"><span>DAG PROGRESS</span><strong id="dag-count">--</strong><small>Reference node completion</small></article>
+      <article class="metric"><span>DAEMON CONNECTION</span><strong class="metric-word">Offline</strong><small>Local reference only</small></article>
+    </section>
+    <section class="overview-grid" aria-label="Reference state">
+      <article class="panel"><div class="panel-heading"><h2>Deliberation rooms</h2><button id="inspect-rooms" class="text-button" type="button">Inspect rooms &#8599;</button></div><div id="rooms" class="room-list"></div></article>
+      <article class="panel"><div class="panel-heading"><h2>Execution topology</h2><button id="inspect-dag" class="text-button" type="button">Inspect DAG &#8599;</button></div><div id="dag" class="dag-list"></div><p class="panel-footnote">Local checkpoints, not verified execution snapshots.</p></article>
+    </section>
+    <section id="workspace" class="workspace" aria-labelledby="workspace-title">
+      <div class="section-heading"><div><p class="eyebrow">TOOL WORKSPACE</p><h2 id="workspace-title">Inspect &amp; operate</h2></div><span id="tool-kind" class="tag">READ ONLY</span></div>
+      <div class="tool-layout">
+        <article class="panel tool-panel">
+          <p id="tool-family" class="eyebrow"></p><h3 id="tool-title">Select a capability</h3><p id="tool-description" class="tool-description"></p>
+          <form id="tool-form"><div id="fields"></div><button id="run" class="primary" type="submit" disabled>Run tool <span aria-hidden="true">&#8599;</span></button></form>
+        </article>
+        <article class="panel result-panel"><div class="panel-heading"><h3>Execution result</h3><span id="result-state" class="tag">IDLE</span></div><p id="result-summary">Results come directly from the shared MCP dispatcher.</p><pre id="result" tabindex="0" aria-label="Tool result">Select a tool to begin.</pre><p class="panel-footnote">No result history is stored in this browser. Identity reference tokens are redacted; dashboard launch tokens stay in memory.</p><a id="dashboard-link" hidden>Open this dashboard in a new tab</a></article>
+      </div>
+    </section>
+    <footer><span>ACR PROTOCOL <span class="slash">/</span> ONE DASHBOARD</span><span>Local scope. Explicit control.</span></footer>
+  </main>
+  <dialog id="confirmation" aria-labelledby="confirm-title">
+    <p class="eyebrow">EXPLICIT LOCAL CONSENT</p><h2 id="confirm-title">Confirm reference mutation</h2><p>This changes shared local state visible to Claude. It is not a signed human-governance approval.</p><pre id="confirm-args"></pre><div class="dialog-actions"><button id="cancel" class="secondary" type="button">Cancel</button><button id="confirm" class="primary" type="button">Confirm local change</button></div>
+  </dialog>
+</body>
+</html>

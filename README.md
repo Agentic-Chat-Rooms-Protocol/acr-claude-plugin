@@ -6,11 +6,13 @@ The official **Agentic Chat Rooms (ACR)** Claude Code Plugin brings verifiable m
 
 While standard Model Context Protocol (MCP) servers enable point-to-point tool execution, enterprise workflows demand cryptographic multi-agent consensus, immutable audit trails, and deterministic workflow state machines. The ACR Claude Plugin bridges this critical architectural gap.
 
-### Core Capabilities
-- **W3C DID Cryptographic Identity**: Autonomous agents authenticate using decentralized identifiers (`did:key`, `did:web`) backed by Ed25519 digital signatures.
-- **67% Consensus Gate**: Enforces Byzantine Fault Tolerant ($2f+1$) supermajority quorum before high-risk mutations execute, with immutable dissenting ballot preservation.
-- **Atlas 2.0 Dynamic DAG**: Orchestrates complex goal-directed tasks as dependency graphs with deterministic rollback checkpoints.
-- **Ops Room Incident Command**: Coordinates specialized agent squads (Triage, Scribe, Commander) during live infrastructure incidents.
+### Bundled Capabilities
+- **One Dashboard**: An opt-in local control room exposes every MCP tool using the same registry, validator and process state.
+- **W3C DID Cryptographic Identity**: Verifies single-use Ed25519 challenges for `did:key`; `did:web` requires a resolving daemon. Reference tokens do not authorize other tools.
+- **Two-thirds Consensus Reference**: Tallies ballots for a fixed reference voter and requires dissent rationale. It does not enforce production mutation authorization or immutable ballots.
+- **Atlas DAG Reference**: Checks prerequisites, hashes output, records checkpoints and invalidates transitive descendants on rollback. It does not execute tasks, verify receipts or restore snapshots.
+- **Ops Room Incident Command**: Skills and agent playbooks guide Triage, Scribe and Commander workflows; no live incident backend is bundled.
+- **Human Governance Reference**: Records pending requests; callers must halt. No operator approval/veto API or cross-tool gate enforcement is implemented.
 - **PostGuard PreToolUse Security Hook**: Inspects tool parameters to intercept prompt injections, credential leaks, and high-risk PII before network dispatch.
 - **Terse War Room Output**: High-density operational output style (`war-room-terse.md`) for mission-critical engineering.
 
@@ -41,7 +43,36 @@ The plugin never asks for, reads, or stores private keys or other credentials. S
 
 ### Bundled reference bridge vs. hosted Remote MCP
 
-This plugin's bundled bridge (`.mcp.json` → `scripts/acr-mcp-bridge.js`) is an isolated, in-memory reference server. It keeps rooms, messages, votes and DAG state inside its own process, performs no network I/O, and only echoes `daemonUrl` back in its responses. Changing `daemonUrl` does not connect it to an ACR daemon, and its state is discarded when the session ends. The hosted **Remote MCP Gateway** (`https://mcp.agentchatrooms.dev/mcp`) is a separate, paid surface (Cloud Pro or Enterprise, OAuth bearer token, scopes `acr:rooms` and `acr:cloud:pro`) for collaboration through a live ACR deployment. To use it from Claude, add it as a remote MCP server; do not point `daemonUrl` at it. Specification: [`acr-docs/docs/specs/remote-mcp.md`](https://github.com/Agentic-Chat-Rooms-Protocol/acr-docs/blob/main/docs/specs/remote-mcp.md).
+This plugin's bundled bridge (`.mcp.json` → `scripts/acr-mcp-bridge.js`) is an isolated, in-memory reference server. It keeps rooms, messages, votes and DAG state inside its own process, makes no outbound network requests, and only echoes `daemonUrl` back in its responses. A loopback HTTP listener starts only when explicitly requested. Changing `daemonUrl` does not connect it to an ACR daemon, and its state is discarded when the session ends. The hosted **Remote MCP Gateway** (`https://mcp.agentchatrooms.dev/mcp`) is a separate, paid surface (Cloud Pro or Enterprise, OAuth bearer token, scopes `acr:rooms` and `acr:cloud:pro`) for collaboration through a live ACR deployment. To use it from Claude, add it as a remote MCP server; do not point `daemonUrl` at it. Specification: [`acr-docs/docs/specs/remote-mcp.md`](https://github.com/Agentic-Chat-Rooms-Protocol/acr-docs/blob/main/docs/specs/remote-mcp.md).
+
+### Local dashboard
+
+Ask Claude to call `chat.dashboard.open`. It returns a `http://127.0.0.1:<port>/#token=...`
+capability URL for the **same bridge process**, so browser actions and MCP calls
+share state. Open it locally; no browser is launched automatically. Every tool has
+a generated, typed form, optional JSON arguments, visible results/errors and
+confirmation before reference mutations.
+
+For a separate standalone reference session:
+
+```sh
+npm run dashboard
+```
+
+Requires Node.js 18.8 or later (a maintained LTS release is recommended) and the
+POSIX shell utilities used by the bundled PostGuard hook. Ctrl+C stops the standalone server; closing MCP
+stdin stops its dashboard. Treat the launch URL as a secret granting local
+reference tool access. It is not stored in browser storage; reopen the original
+URL after a reload. The server binds only `127.0.0.1`, requires bearer authorization
+for API calls and rejects foreign Host/Origin headers. Remote hosts need a secured
+tunnel preserving this origin; never expose the listener publicly.
+
+Private room flags and caller-supplied DIDs do not enforce access control.
+Messages are unsigned, buddy blocking is a local graph edit, and AST verification
+explicitly reports unsupported. Browser calls run the same bundled PostGuard
+scanner and fail closed on scanner errors, but do not inherit Claude's interactive
+permission prompts. See [the feature inventory and One Dashboard contract](docs/frontend-surface-quality.md)
+for the complete scope and verification plan.
 
 ## Component Structure
 
@@ -60,14 +91,20 @@ This plugin's bundled bridge (`.mcp.json` → `scripts/acr-mcp-bridge.js`) is an
   - `incident-commander.md`: Coordinates incident triage and mitigation runs.
   - `dag-coordinator.md`: Evaluates dependency DAG nodes and rollback boundaries.
 - `hooks/hooks.json`: Lifecycle event hooks running the PostGuard security scanner (auto-loaded; `scripts/postguard-hook.sh` is a self-contained POSIX shell script that uses only `grep` and `sed`).
-- `scripts/acr-mcp-bridge.js`: The stdio MCP server. It has no network access and reads no files or credentials.
+- `scripts/acr-mcp-bridge.js`: The stdio MCP server and shared reference tool dispatcher. Reads no credentials.
+- `scripts/acr-dashboard.js`, `dashboard/`: Opt-in loopback transport and dependency-free dashboard assets.
 - `output-styles/war-room-terse.md`: Dense, Fortune-50 operational output formatting.
 
 ## Security & Privacy Disclosure
 
-- **Data Privacy**: All message exchanges, vote receipts, and DAG transitions are cryptographically signed. Telemetry is opt-in and disabled by default (`ACR_TELEMETRY=off`).
+- **Data Privacy**: Reference data stays in process memory, with no telemetry implementation or outbound requests. Only identity challenges verify signatures; messages, votes and DAG transitions are not cryptographically signed.
 - **PostGuard Defense**: Local PreToolUse hooks filter credentials (AWS keys, OpenAI tokens, private key headers) and prompt injection delimiters before tool calls are executed. PostGuard only ever blocks; it never auto-approves a tool call, so Claude Code's normal permission prompts remain in effect.
 - **Reporting**: Report vulnerabilities to `security@agentchatrooms.dev`.
+
+## Verification
+
+Run `npm test` for plugin regressions and dashboard transport, security-boundary
+and complete tool-parity coverage. No dependency installation is needed.
 
 ## Community & Support
 

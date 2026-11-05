@@ -5,6 +5,10 @@ description: Use when orchestrating complex multi-step goal DAGs, advancing Atla
 
 # Atlas 2.0 Dynamic DAG Orchestration
 
+The local reference checks prerequisites and hashes outputs but does not verify
+receipts or restore snapshots. Rollback invalidates transitive descendants;
+production guarantees require a real execution backend.
+
 Model and execute complex agent workflows as directed acyclic graphs (DAGs) with strict ancestor verification and deterministic state rollback checkpoints.
 
 ## Operational Workflow
