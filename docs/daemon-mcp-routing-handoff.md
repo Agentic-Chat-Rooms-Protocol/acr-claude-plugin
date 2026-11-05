@@ -196,8 +196,9 @@ about 60 seconds so a lapsed account does not hammer the gateway.
 | `401 invalid_token`, refresh succeeds | Retry once, silently |
 | `401`, refresh fails | Stay on remote, report "sign in again". **Do not** reroute to local |
 | `403 insufficient_scope` | Stop. Show "your plan does not include Cloud MCP" with the upgrade/step-up link from the challenge. Do not resend the token. Negative-cache |
-| Timeout, `5xx`, network error | Error naming the endpoint. Exponential backoff with jitter, at most 3 tries, circuit breaker. No auto-failover |
-| `3xx` | Error (possible redirect attack) |
+| Timeout, `5xx` or network error on a **read** (`initialize`, `tools/list`, `acr_list_rooms`, `acr_get_messages`, `acr_get_agent_did`, `acr_verify_message_sig`, `acr_get_consensus_state`, `acr_get_goal_dag`, `acr_container_status`) | Error naming the endpoint. Exponential backoff with jitter, at most 3 tries, circuit breaker. No auto-failover |
+| Timeout, `5xx` or network error on a **mutation** (`acr_post_message`, `acr_create_room`, `acr_join_room`, `acr_rotate_keys`, `acr_propose_action`, `acr_cast_vote`, `acr_update_goal_status`, `acr_declare_incident`, `acr_escalate_human_review`, and any `chat.*` write) | **No automatic retry.** The mutation may have committed before the failure. Report "outcome unknown", name the endpoint, and let the caller verify with a read (for example `acr_get_messages`). Retry automatically only if the gateway documents an idempotency key that makes replays safe (*Confirm*), or if the failure happened before the request was sent (connection refused, DNS or TLS handshake failure) |
+| `3xx` | Error (possible redirect attack). Implemented as a `CheckRedirect` error, not `http.ErrUseLastResponse`, which would return the `3xx` as a normal response |
 | TLS failure | Hard error |
 | Subscription lapses | `403` flips the resolver to local for the next session and prints "Cloud MCP paused; local MCP unchanged" |
 
@@ -225,7 +226,22 @@ Work in the order below. Each phase is independently shippable and should be its
 
 ### Phase 0: harden the daemon (`acr-core`) - gate for everything else
 
-See section 7. Do not start Phase 3 until this is merged.
+See section 7. Enforcing local API auth (D4) breaks every existing daemon consumer that does not send a token. At the
+reviewed revision `cmd/mcp-server/main.go` calls `client.Get` and `client.Post` with no `Authorization` header, so room
+creation, joins, reads and message sends would all return `401`. Roll D4 out in three steps, each its own release:
+
+1. **0a - ship the non-breaking daemon changes:** D2, D3 (including preflight handling), D5, D6, D7, and the
+   `-bind` flag and `~/.acr/api-token` generation from D1/D4, with enforcement **off** (`-require-auth=false`).
+   Log a one-line warning at startup that unauthenticated access is deprecated.
+2. **0b - make every daemon consumer token-aware:** read the token from `ACR_API_TOKEN`, falling back to
+   `~/.acr/api-token`, and send it as `Authorization: Bearer <token>` on every request, SSE included. Known
+   consumers: `cmd/mcp-server` (and the duplicate in `acr-mcp-server`), the `acr-cli` client, the `acr-bridge`
+   daemon client and platform bridges, the SDK clients, and the web UI. Audit for others; do not rely on this list.
+3. **0c - flip the default to enforce** (`-require-auth` defaults to `true`) only after every consumer in 0b has
+   shipped, and call it out in the changelog as a breaking change.
+
+Do not start Phase 3 until 0c is merged. The Phase 2 resolver work may proceed in parallel with 0a and 0b, because
+it does not depend on enforcement.
 
 ### Phase 1: specify (`acr-docs`)
 
@@ -238,8 +254,12 @@ See section 7. Do not start Phase 3 until this is merged.
 ### Phase 2: resolver package (`acr-core`)
 
 1. Add `pkg/mcpendpoint` using Appendix A as the starting point.
-2. Make `cmd/mcp-server` call `ValidateLocal` on `ACR_DAEMON_URL`, and use `NewHTTPClient` (no redirects).
-   Fail at startup with a clear message on an invalid URL instead of continuing.
+2. Make `cmd/mcp-server` call `ValidateLocal` on `ACR_DAEMON_URL`, and replace its `&http.Client{Timeout: 10 * time.Second}`
+   with `NewHTTPClient()`, which keeps that 10 s timeout and adds a redirect error. The server handles stdio requests
+   serially, so an unbounded client would let one unresponsive daemon block every later request. Use
+   `NewStreamClient()` only for SSE, where an overall timeout would cut the stream. Because `postJSON` only rejects
+   status `>= 400`, a client that returned a `3xx` as a normal response would make a redirected write look
+   successful. Fail at startup with a clear message on an invalid URL instead of continuing.
 3. Run the shared vectors in `go test`.
 4. Remove the duplicated standalone `acr-mcp-server/main.go`, or make it import the package (finding C11).
 
@@ -269,11 +289,15 @@ Only where they need to choose an endpoint. Port the resolver to TypeScript, loa
 
 ### Phase 6: rollout
 
-1. Ship Phases 0-2 behind no flag (they only tighten behaviour).
+1. Ship Phases 0a-0b and 2 without a feature flag (they only tighten behaviour or add opt-in capability). Phase 0c is a
+   breaking change: ship it as its own release, after every consumer has shipped token support.
 2. Ship Phase 3 as a beta command group. Because self-serve OAuth is still "rolling out", pre-release testing must use
    an account provisioned through `support@agentchatrooms.dev`.
 3. Announce the `127.0.0.1` bind change in the changelog. Users who relied on LAN access must opt in with
-   `-allow-nonloopback`, which also requires local API auth.
+   `-bind <address> -allow-nonloopback -allowed-host <address-or-name>` (repeatable). `-allow-nonloopback` also requires
+   local API auth to be enforced, and the daemon refuses to start without at least one `-allowed-host` when the bind is
+   not loopback. A wildcard bind (`0.0.0.0`, `::`) is accepted only with explicit `-allowed-host` entries, never as an
+   implicit allow-all.
 
 ## 7. Daemon changes (`acr-core`)
 
@@ -281,53 +305,83 @@ These are the only daemon changes required. None adds subscription logic.
 
 | # | Change | Where |
 |---|---|---|
-| D1 | Bind to `127.0.0.1` by default. Add `-bind` / `ACR_BIND`. Refuse a non-loopback bind unless `-allow-nonloopback` is set **and** local API auth is enabled | `cmd/daemon/main.go:105` |
-| D2 | Reject requests whose `Host` is not `localhost`, `127.0.0.1` or `::1` (DNS rebinding) | new middleware |
-| D3 | Replace `Access-Control-Allow-Origin: *` with an exact-match allowlist (`ACR_ALLOWED_ORIGINS`). Reject, server-side, any request carrying a non-allowlisted `Origin`. Apply the same rule to the SSE handler (`gateway.go:253`). Emit the PNA header only for allowlisted origins | `corsHeaders`, `handleSSE` |
-| D4 | Require `Authorization: Bearer <local token>` on every mutating route. Token is 256 random bits at `~/.acr/api-token` (mode `0600`), compared in constant time. Browsers get a short-lived session through the existing `/api/v1/auth/challenge` and `/verify` DID flow and the already-allowed `X-ACR-Session` header (*Confirm* design with the daemon owners) | `RegisterRoutes` |
+| D1 | Bind to `127.0.0.1` by default. Add `-bind` / `ACR_BIND`. Refuse a non-loopback bind unless `-allow-nonloopback` is set, local API auth is enforced (D4), **and** at least one `-allowed-host` is given (D2) | `cmd/daemon/main.go:105` |
+| D2 | Host allowlist (DNS rebinding). Default `localhost`, `127.0.0.1`, `::1`. With `-allow-nonloopback`, add only the exact addresses or names given by `-allowed-host` / `ACR_ALLOWED_HOSTS`; never a wildcard. A normal request to an allowed LAN address must succeed, and one to any other Host must get `403` | new middleware |
+| D3 | Replace `Access-Control-Allow-Origin: *` with an exact-match allowlist (`ACR_ALLOWED_ORIGINS`). Reject, server-side, any request carrying a non-allowlisted `Origin`. Answer CORS preflights (`OPTIONS` with `Access-Control-Request-Method`) for allowlisted origins directly, before token enforcement, because a preflight never carries the credential. Apply the same rule to the SSE handler (`gateway.go:253`). Emit the PNA header only on a preflight from an allowlisted origin that asked for it | `corsHeaders`, `handleSSE` |
+| D4 | Require `Authorization: Bearer <local token>` on **every** route except the public list in D7: reads (rooms, messages, audit, files, agents) and the SSE stream as well as mutations. Host and Origin checks stop browsers, not other processes or LAN peers, so they are not authentication. Token is 256 random bits at `~/.acr/api-token` (mode `0600`), compared in constant time, and an empty or unset token must reject everything (fail closed). Browsers cannot send headers from `EventSource`, so web clients stream with `fetch` and the `X-ACR-Session` header; never put a token in a URL. Browser sessions come from the existing `/api/v1/auth/challenge` and `/verify` DID flow (*Confirm* design with the daemon owners). Roll out per Phase 0a-0c | `RegisterRoutes` |
 | D5 | Remove unauthenticated `POST`/`PUT` on `/api/v1/config/security`. Require D4 and a loopback peer, and ignore any request with an `Origin` header | `handleSecurityConfig` |
 | D6 | Make CORS and PNA default **off**; turn on only through D3's allowlist | `cmd/daemon/main.go:20-21` |
-| D7 | Keep `/healthz`, `/health`, `/api/v1/health` readable without a token, but add only non-sensitive fields. Optionally add `"mcp": {"local": true}` for diagnostics. Never add tier, token or a remote URL | health handlers |
+| D7 | The only routes reachable without a token: `/healthz`, `/health`, `/api/v1/health`, and the auth-bootstrap routes `/api/v1/auth/challenge` and `/api/v1/auth/verify` (*Confirm* the bootstrap routes expose nothing sensitive). Keep health responses to non-sensitive fields; optionally add `"mcp": {"local": true}`. Never add tier, token or a remote URL | health handlers |
 
-Reference sketches (compiled and tested; see Appendix A for the test table):
+Reference sketches (compiled and tested; see Appendix A for the test tables):
 
 ```go
-bind := flag.String("bind", "127.0.0.1", "listen address; non-loopback needs -allow-nonloopback and local API auth")
+bind := flag.String("bind", "127.0.0.1", "listen address; non-loopback needs -allow-nonloopback, -allowed-host and enforced local API auth")
 srv := &http.Server{Addr: net.JoinHostPort(*bind, strconv.Itoa(*portFlag)) /* ... */}
 
-func HostGuard(next http.Handler) http.Handler {
+// LoopbackHosts is the default Host allowlist. With -allow-nonloopback, add the exact
+// addresses or names clients use (for example 192.168.1.5); never a wildcard.
+var LoopbackHosts = map[string]bool{"localhost": true, "127.0.0.1": true, "::1": true}
+
+// PublicPaths are reachable without a token. Everything else, reads and SSE included, needs one.
+var PublicPaths = map[string]bool{
+	"/healthz": true, "/health": true, "/api/v1/health": true,
+	"/api/v1/auth/challenge": true, "/api/v1/auth/verify": true,
+}
+
+func HostGuard(allowed map[string]bool, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h, _, err := net.SplitHostPort(r.Host)
 		if err != nil {
 			h = strings.Trim(r.Host, "[]")
 		}
-		switch h {
-		case "localhost", "127.0.0.1", "::1":
-			next.ServeHTTP(w, r)
-		default:
+		if !allowed[strings.ToLower(h)] {
 			http.Error(w, "forbidden host", http.StatusForbidden)
-		}
-	})
-}
-
-func OriginGuard(allowed map[string]bool, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if o := r.Header.Get("Origin"); o != "" {
-			if !allowed[o] {
-				http.Error(w, "forbidden origin", http.StatusForbidden)
-				return
-			}
-			w.Header().Set("Access-Control-Allow-Origin", o)
-			w.Header().Add("Vary", "Origin")
+			return
 		}
 		next.ServeHTTP(w, r)
 	})
 }
 
-func RequireToken(token []byte, next http.Handler) http.Handler {
+// OriginGuard rejects non-allowlisted origins and answers CORS preflights itself. A preflight
+// never carries credentials, so it must be answered before RequireToken sees it.
+func OriginGuard(allowed map[string]bool, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if subtle.ConstantTimeCompare([]byte(got), token) != 1 {
+		o := r.Header.Get("Origin")
+		if o == "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if !allowed[o] {
+			http.Error(w, "forbidden origin", http.StatusForbidden)
+			return
+		}
+		h := w.Header()
+		h.Set("Access-Control-Allow-Origin", o)
+		h.Add("Vary", "Origin")
+		if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
+			h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			h.Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-ACR-Session, X-ACR-Client")
+			h.Set("Access-Control-Max-Age", "600")
+			if r.Header.Get("Access-Control-Request-Private-Network") == "true" {
+				h.Set("Access-Control-Allow-Private-Network", "true")
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// RequireToken fails closed: an empty configured token or a missing "Bearer " prefix never passes.
+func RequireToken(token []byte, public map[string]bool, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if public[r.URL.Path] {
+			next.ServeHTTP(w, r)
+			return
+		}
+		got, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if !ok || len(token) == 0 || subtle.ConstantTimeCompare([]byte(got), token) != 1 {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="acr-local"`)
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
@@ -338,8 +392,10 @@ func RequireToken(token []byte, next http.Handler) http.Handler {
 ```
 
 `OriginGuard` closes finding C5 even though the browser sends a "simple" request: a cross-origin `POST` still carries an
-`Origin` header, and the server now refuses it before the handler runs. It does not stop a non-browser local process,
-which is what D4 is for. Wire the guards in the order `HostGuard` → `OriginGuard` → `RequireToken` → handlers.
+`Origin` header, and the server now refuses it before the handler runs. Host and Origin guards only constrain
+browsers. They do not authenticate a non-browser caller, including a LAN peer that omits `Origin` and sends an
+allowed `Host`; `RequireToken` on every non-public route (reads and SSE too) is what stops that. Wire the guards in the
+order `HostGuard` → `OriginGuard` (answers preflights) → `RequireToken` → handlers.
 
 ## 8. Test plan
 
@@ -348,29 +404,41 @@ which is what D4 is for. Wire the guards in the order `HostGuard` → `OriginGua
 | Resolver | Shared vectors: every accept/reject URL in 5.3 | Identical result in Go, Dart and TS |
 | Resolver | Mode table: no creds, `acr:rooms` only, `acr:cloud:pro` only, both, each override | Matches Appendix A table |
 | Resolver | Invalid local URL while remote is chosen | Still an error (no latent bad config) |
-| HTTP client | Server replies `302` to another host | Error; no second request is sent |
+| HTTP client | Server replies `302` to another host (REST and stream clients) | The call returns an error (not a `3xx` response); the target receives no request |
+| HTTP client | `NewHTTPClient().Timeout`, and a daemon that never answers | 10 s timeout preserved; the MCP server does not block indefinitely |
 | HTTP client | Remote presents an invalid or self-signed cert | Hard error, no override |
+| Retry | Mutating tool call fails with a timeout or `5xx` after the request was sent | Exactly one request sent; caller is told the outcome is unknown |
+| Retry | Read fails with a `5xx` | Retried with backoff, at most 3 tries |
 | Contract | Against the gateway with a Community token | `403 insufficient_scope`, no fallback to local |
 | Contract | Expired token | `401`, one refresh attempt, then re-auth prompt |
 | Contract | Pro token | `200` on `initialize` and `tools/list` |
 | Credential | Run login/use/logout with debug logging and a canary token | Canary appears in no log, argv, env, file or URL |
 | Credential | Keychain unavailable | Refuses; writes no file |
-| Daemon | Table in Appendix A (Host, Origin, token) | All rows pass |
+| Daemon | Table in Appendix A (Host, Origin, token, preflight, public paths, reads, SSE) | All rows pass |
+| Daemon | Start with `-bind 192.168.1.5 -allow-nonloopback -allowed-host 192.168.1.5` and a token | A request to `http://192.168.1.5:20443` with the token succeeds; without the token or with another Host it fails |
+| Daemon | Start with `-allow-nonloopback` and no `-allowed-host`, or a non-loopback bind without enforced auth | Refuses to start |
+| Daemon | Browser test: allowlisted origin sends an authenticated `fetch` with `Authorization` | Preflight returns `204` with the CORS headers, then the authenticated request succeeds |
 | Daemon | Browser test: cross-origin `text/plain` `POST` to `/api/v1/config/security` from a non-allowlisted origin | `403`, config unchanged |
 | Daemon | Start with default flags | Listens on `127.0.0.1` only (`ss -ltn`) |
 | Transition | Upgrade then downgrade while a session is open | Endpoint shown in `acr mcp status` flips with an explicit message; no room data written to the wrong store |
 | Regression | Existing free-tier flows | Unchanged against a hardened daemon, using the local API token |
+| Rollout | Each daemon consumer from Phase 0b (MCP server, CLI, bridge, SDKs, web UI) against a daemon with `-require-auth=true` | All succeed before 0c flips the default |
 
 ## 9. Checklist
 
 - [ ] D1-D7 merged in `acr-core`; default `acr-daemon` listens only on loopback
+- [ ] Every daemon consumer sends the local token (Phase 0b) **before** enforcement becomes the default (Phase 0c)
+- [ ] Reads and SSE require the token; only the D7 public routes do not
 - [ ] `/api/v1/config/security` cannot be changed without the local token
+- [ ] LAN opt-in works end to end with `-allowed-host`, and refuses to start without it
 - [ ] `mcp-endpoint-resolution.md` and `endpoint-vectors.json` merged in `acr-docs`
 - [ ] `pkg/mcpendpoint` merged; `cmd/mcp-server` validates `ACR_DAEMON_URL` at startup
 - [ ] Standalone `acr-mcp-server` no longer carries a second copy of `main.go`
 - [ ] `acr login` / `logout` / `mcp status` / `mcp install` work against a provisioned Pro account
 - [ ] No code path sends a Cloud token to a host other than the pinned constant
 - [ ] No fallback between tiers on error (tests prove it)
+- [ ] Mutating tool calls are never auto-retried without a documented idempotency mechanism
+- [ ] REST client keeps the 10 s timeout and treats a `3xx` as an error
 - [ ] `acr tunnel` stub and its plaintext-IP fallback removed
 - [ ] Claude plugin default port corrected to `20443`; ChatGPT plugin URL test added
 - [ ] Changelog entry for the loopback bind and local API token
@@ -386,10 +454,14 @@ which is what D4 is for. Wire the guards in the order `HostGuard` → `OriginGua
 6. Where should the resolver live long-term: `acr-core/pkg`, the CLI, or a published SDK?
 7. Does the gateway validate token audience against its own URL (RFC 8707)? Clients assume it does.
 8. Is there a planned migration path from local rooms to cloud rooms, or are they permanently separate?
+8a. Does the gateway support an idempotency key (header or tool argument) for mutating tools? Without one, clients must
+    not retry mutations automatically (section 5.6).
 9. Which web origins legitimately need the daemon's CORS allowlist (D3)? The portal origin is not documented in the
    public specs.
 10. Confirm the current MCP authorization and transport requirements (Origin validation for local HTTP servers,
     resource indicators, no token passthrough) against the latest MCP specification revision.
+11. Which route set does the web UI use for authenticated streaming (D4), and can it use `fetch`-based SSE with a
+    session header instead of `EventSource`?
 
 ## 11. Follow-ups in this repository (not part of this change)
 
@@ -405,9 +477,11 @@ Incidental, outside this scope: `acr-core` tracks built binaries (`acr-daemon.ex
 
 ## Appendix A: verified reference code
 
-The resolver and the guards in section 7 compiled with `go vet` and passed `go test` in a scratch module (Go 1.27;
-`acr-core`'s `go.mod` declares `go 1.26`, and the code uses only long-standing standard-library APIs). The tests caught
-one real bug during review: host comparison must be case-insensitive.
+The resolver and the guards in section 7 compiled with `go vet` and passed `go test` in a scratch module (toolchain
+Go 1.27, module language level `go 1.21`; `acr-core`'s `go.mod` declares `go 1.26`). The tests, and review of the first
+draft, caught real bugs that are fixed in the code below: host comparison must be case-insensitive; an empty configured
+token must not match an empty header; a bare token without the `Bearer ` scheme must not pass; `http.ErrUseLastResponse`
+returns a `3xx` as a success; and a client without `Timeout` removes the MCP server's 10 s bound.
 
 `pkg/mcpendpoint/endpoint.go`:
 
@@ -421,12 +495,15 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
 	// RemoteURL is compiled in. No flag, env var, file or server response may change it.
 	RemoteURL        = "https://mcp.agentchatrooms.dev/mcp"
 	DefaultLocalPort = 20443
+	// RESTTimeout matches the 10 s client timeout cmd/mcp-server already uses.
+	RESTTimeout = 10 * time.Second
 )
 
 type Mode string
@@ -528,11 +605,24 @@ func hasAll(have, want []string) bool {
 	return true
 }
 
-// NewHTTPClient never follows redirects, so a 3xx cannot carry a bearer token to another origin.
+var errRedirect = errors.New("mcpendpoint: redirects are not followed")
+
+// A non-nil error is required: http.ErrUseLastResponse would hand the 3xx back as a normal
+// response, and callers that only check status >= 400 would treat it as success.
+func noRedirect(*http.Request, []*http.Request) error { return errRedirect }
+
+// NewHTTPClient is for request/response calls. It keeps the finite timeout and never follows
+// redirects, so a 3xx cannot carry a bearer token to another origin.
 func NewHTTPClient() *http.Client {
-	return &http.Client{
-		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-	}
+	return &http.Client{Timeout: RESTTimeout, CheckRedirect: noRedirect}
+}
+
+// NewStreamClient is for long-lived SSE. An overall Client.Timeout would cut the stream, so it
+// is left at zero and the server must instead send response headers within RESTTimeout.
+func NewStreamClient() *http.Client {
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.ResponseHeaderTimeout = RESTTimeout
+	return &http.Client{Transport: tr, CheckRedirect: noRedirect}
 }
 ```
 
@@ -549,19 +639,37 @@ Resolution table (also the `Resolve` unit test):
 | Invalid local URL, paid | none | both | error |
 | Unknown override | `cloud` | none | error |
 
-Daemon guard table (also the guard unit test):
+Daemon guard table (also the guard unit test). "Reached" means the final handler ran:
 
-| Case | Host | Origin | Authorization | Expect |
-|---|---|---|---|---|
-| Local client | `127.0.0.1:20443` | none | valid | `204` |
-| IPv6 loopback | `[::1]:20443` | none | valid | `204` |
-| Allowlisted portal | `localhost:20443` | allowlisted | valid | `204` |
-| DNS rebinding | `evil.com:20443` | none | valid | `403` |
-| LAN host | `192.168.1.5:20443` | none | valid | `403` |
-| Web page, simple `POST` | `127.0.0.1:20443` | `https://evil.com` | none | `403` |
-| Web page holding a token | `127.0.0.1:20443` | `https://evil.com` | valid | `403` |
-| No token | `127.0.0.1:20443` | none | none | `401` |
-| Wrong token | `127.0.0.1:20443` | none | wrong | `401` |
+| Case | Method and path | Host | Origin | Authorization | Expect | Reached |
+|---|---|---|---|---|---|---|
+| Local client | `POST /api/v1/config/security` | `127.0.0.1:20443` | none | valid | `204` | yes |
+| IPv6 loopback | `POST` config | `[::1]:20443` | none | valid | `204` | yes |
+| Allowlisted portal | `POST` config | `localhost:20443` | allowlisted | valid | `204` | yes |
+| DNS rebinding | `POST` config | `evil.com:20443` | none | valid | `403` | no |
+| LAN host, default allowlist | `POST` config | `192.168.1.5:20443` | none | valid | `403` | no |
+| LAN host, listed in `-allowed-host` | `GET /api/v1/rooms` | `192.168.1.5:20443` | none | valid | `204` | yes |
+| LAN host, listed, no token | `GET /api/v1/rooms` | `192.168.1.5:20443` | none | none | `401` | no |
+| Web page, simple `POST` | `POST` config | `127.0.0.1:20443` | `https://evil.com` | none | `403` | no |
+| Web page holding a token | `POST` config | `127.0.0.1:20443` | `https://evil.com` | valid | `403` | no |
+| Mutation, no token | `POST` config | `127.0.0.1:20443` | none | none | `401` | no |
+| Wrong token | `POST` config | `127.0.0.1:20443` | none | wrong | `401` | no |
+| Read, no token | `GET /api/v1/rooms` | `127.0.0.1:20443` | none | none | `401` | no |
+| SSE, no token | `GET /api/v1/events` | `127.0.0.1:20443` | none | none | `401` | no |
+| Health, no token | `GET /api/v1/health` | `127.0.0.1:20443` | none | none | `204` | yes |
+| Auth bootstrap, no token | `POST /api/v1/auth/challenge` | `127.0.0.1:20443` | none | none | `204` | yes |
+| Empty configured token, empty header | `GET /api/v1/rooms` | `127.0.0.1:20443` | none | none | `401` | no |
+| Empty configured token, `Bearer ` only | `GET /api/v1/rooms` | `127.0.0.1:20443` | none | empty bearer | `401` | no |
+| Token without the `Bearer ` scheme | `GET /api/v1/rooms` | `127.0.0.1:20443` | none | bare token | `401` | no |
+| Preflight, allowlisted origin | `OPTIONS` config | `127.0.0.1:20443` | allowlisted | none | `204` plus CORS headers | no |
+| Preflight asking for PNA | `OPTIONS` config | `127.0.0.1:20443` | allowlisted | none | `204` plus `Access-Control-Allow-Private-Network` | no |
+| Preflight, other origin | `OPTIONS` config | `127.0.0.1:20443` | `https://evil.com` | none | `403` | no |
+| Preflight, bad host | `OPTIONS` config | `evil.com:20443` | allowlisted | none | `403` | no |
+| Preflight without `Origin` | `OPTIONS` config | `127.0.0.1:20443` | none | none | `401` | no |
+
+HTTP client tests: a `302` from either client returns an error and the redirect target receives no request;
+`NewHTTPClient().Timeout` equals `RESTTimeout`; `NewStreamClient()` has no overall timeout but bounds
+`ResponseHeaderTimeout`.
 
 ## Appendix B: commands to verify the findings
 
