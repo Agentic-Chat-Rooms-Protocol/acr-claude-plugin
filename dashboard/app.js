@@ -59,7 +59,7 @@ function navigation() {
     button.setAttribute('aria-pressed', String(category === label));
     button.append(element('span', label), element('span', String(tools.filter(tool => label === families[0] || family(tool.name) === label).length), 'nav-count'));
     button.addEventListener('click', () => {
-      if (busy || !tool) return;
+      if (busy) return;
       category = label;
       $('tool-search').value = '';
       navigation();
