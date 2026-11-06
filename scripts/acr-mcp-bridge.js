@@ -3,20 +3,15 @@
  * ACR MCP Bridge & Reference Server for Claude Code
  *
  * Implements JSON-RPC 2.0 Model Context Protocol (MCP) server over stdio.
- * Exposes the full agent-usable surface of the ACR ecosystem:
- * - Real-time rooms, presence, and messaging
- * - W3C DID identity challenge/verification
- * - 67% Byzantine consensus gate ($2f+1$) with mandatory dissent rationale (RFC-0002 / GAP-08)
- * - Atlas 2.0 dynamic DAG task state machine & deterministic rollback checkpoints
- * - Fail-closed human-in-the-loop governance gates
- * - AST structural invariance validation
+ * Local rooms, did:key signature verification, reference consensus/DAG/governance
+ * state and an opt-in dashboard. Not a live daemon or production authorization layer.
  */
 
 const readline = require('readline');
 const crypto = require('crypto');
 
 // Configuration comes from the plugin's userConfig via environment variables. The bridge never
-// reads key material or credentials, and it performs no network I/O of its own.
+// reads key material or credentials. A loopback listener starts only on explicit dashboard launch.
 const DEFAULT_DAEMON_URL = 'http://localhost:8080';
 
 // Echoed back to the model, so keep only scheme://host[:port]/path and drop any userinfo or query.
@@ -59,6 +54,7 @@ function evictOldest(map, max) {
 
 // Stateful In-Memory ACR Mesh Database
 const state = {
+  security: { cors_enabled: true, pna_enabled: true },
   rooms: new Map([
     ['general', { id: 'general', name: 'General Deliberation', topic: 'Main multi-agent room', is_private: false, members: new Set(['did:key:z6MkuV4ACRSystemGenesis1']) }],
     ['ops-war-room', { id: 'ops-war-room', name: 'Ops War Room', topic: 'Live incident triage', is_private: false, members: new Set() }]
@@ -68,7 +64,7 @@ const state = {
       {
         id: 'msg_genesis_01',
         sender_did: 'did:key:z6MkuV4ACRSystemGenesis1',
-        content: 'ACR Mesh initialized. W3C Ed25519 identity and 67% Consensus Gate active.',
+        content: 'ACR in-memory reference initialized. Seeded demonstration data; no live daemon connection.',
         timestamp: Math.floor(Date.now() / 1000) - 3600
       }
     ]],
@@ -110,36 +106,36 @@ const state = {
 const TOOLS = [
   {
     name: 'chat.health',
-    description: 'Inspects ACR Mesh health, latency, connected agent count, and audit chain block height.',
+    description: 'Reports local reference process readiness and room count. Does not connect to a daemon.',
     inputSchema: { type: 'object', properties: {} }
   },
   {
     name: 'chat.rooms.list',
-    description: 'Queries all active public and private agent deliberation channels.',
+    description: 'Lists local reference rooms. Private flags are metadata, not access control.',
     inputSchema: { type: 'object', properties: {} }
   },
   {
     name: 'chat.room.create',
-    description: 'Initializes a new cryptographic deliberation room.',
+    description: 'Creates an in-memory reference room, without cryptographic access control.',
     inputSchema: {
       type: 'object',
       properties: {
         name: { type: 'string', description: 'Room name identifier' },
         description: { type: 'string', description: 'Optional channel purpose description' },
         topic: { type: 'string', description: 'Current discussion topic' },
-        is_private: { type: 'boolean', description: 'Whether room requires explicit buddy invitation' }
+        is_private: { type: 'boolean', description: 'Reference private flag only; does not enforce invitations or access control' }
       },
       required: ['name']
     }
   },
   {
     name: 'chat.room.join',
-    description: 'Authenticates agent DID entry into room presence graph.',
+    description: 'Adds a caller-supplied DID to local room presence; does not authenticate it.',
     inputSchema: {
       type: 'object',
       properties: {
         room_id: { type: 'string', description: 'Room ID to join' },
-        did: { type: 'string', description: 'Authenticated agent W3C DID' }
+        did: { type: 'string', description: 'Caller-supplied agent DID; not authenticated by this tool' }
       },
       required: ['room_id', 'did']
     }
@@ -158,7 +154,7 @@ const TOOLS = [
   },
   {
     name: 'chat.message.send',
-    description: 'Broadcasts typed message with optional JSON payload or file attachment.',
+    description: 'Stores an unsigned local message with optional structured JSON attachment; no file upload.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -172,7 +168,7 @@ const TOOLS = [
   },
   {
     name: 'chat.history.fetch',
-    description: 'Replays verified chronological message history for a room.',
+    description: 'Returns local chronological message history, without signature verification.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -184,7 +180,7 @@ const TOOLS = [
   },
   {
     name: 'chat.buddy.request',
-    description: 'Dispatches connection request across agent trust graph.',
+    description: 'Returns a reference buddy request receipt; no request delivery.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -196,7 +192,7 @@ const TOOLS = [
   },
   {
     name: 'chat.buddy.accept',
-    description: 'Finalizes bidirectional agent buddy relationship.',
+    description: 'Records a one-way local buddy relationship.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -208,7 +204,7 @@ const TOOLS = [
   },
   {
     name: 'chat.buddy.block',
-    description: 'Enforces message bus publish-level block between DIDs.',
+    description: 'Removes a local buddy relationship; does not enforce message blocking.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -225,13 +221,13 @@ const TOOLS = [
   },
   {
     name: 'chat.auth.verify',
-    description: 'Validates signed nonce, registers identity, and issues capability session token.',
+    description: 'Verifies a did:key Ed25519 nonce signature and returns a reference token, which does not authorize other tools.',
     inputSchema: {
       type: 'object',
       properties: {
-        did: { type: 'string', description: 'W3C DID (did:key:* or did:web:*)' },
+        did: { type: 'string', description: 'Ed25519 did:key DID; did:web requires a resolving daemon' },
         name: { type: 'string', description: 'Human-readable agent display name' },
-        role: { type: 'string', description: 'Assigned operational role' },
+        role: { type: 'string', description: 'Caller-declared reference role, not an authorization grant' },
         capabilities: { type: 'array', items: { type: 'string' }, description: 'Declared capabilities' },
         nonce: { type: 'string', description: 'Nonce returned by chat.auth.challenge' },
         signature: { type: 'string', description: 'Ed25519 signature over nonce' }
@@ -241,12 +237,12 @@ const TOOLS = [
   },
   {
     name: 'chat.config.get',
-    description: 'Inspects daemon Private Network Access (PNA), CORS, and protocol version.',
+    description: 'Reads local reference settings. Does not inspect a daemon or dashboard security policy.',
     inputSchema: { type: 'object', properties: {} }
   },
   {
     name: 'chat.config.security',
-    description: 'Dynamically configures daemon browser-security boundaries.',
+    description: 'Updates reference CORS/PNA settings only. Cannot change the daemon or dashboard security boundary.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -257,7 +253,7 @@ const TOOLS = [
   },
   {
     name: 'chat_cast_vote',
-    description: 'Casts ballot in consensus proposal. Mandatory non-empty rationale required for DISSENT (RFC-0002 / GAP-08).',
+    description: 'Records a fixed reference voter ballot and two-thirds tally; not production authorization. DISSENT requires rationale.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -270,7 +266,7 @@ const TOOLS = [
   },
   {
     name: 'mcp_ast_diff_verify',
-    description: 'Verifies AST structural invariance and safety before merging code proposals.',
+    description: 'Unsupported locally: fails closed. No AST safety or structural verification is implemented.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -291,7 +287,7 @@ const TOOLS = [
   },
   {
     name: 'acr_advance_dag_node',
-    description: 'Advances an execution node in the Atlas 2.0 dynamic DAG with state output receipt.',
+    description: 'Completes a local DAG node after prerequisite checks and hashes output. Optional receipts are not verified.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -305,7 +301,7 @@ const TOOLS = [
   },
   {
     name: 'acr_rollback_dag',
-    description: 'Rolls back Atlas 2.0 DAG downstream nodes to a verified checkpoint.',
+    description: 'Invalidates transitive downstream nodes from a local checkpoint. Does not restore execution snapshots.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -318,7 +314,7 @@ const TOOLS = [
   },
   {
     name: 'acr_request_human_gate',
-    description: 'Enforces fail-closed human-in-the-loop dual-consent approval gate for high-risk operations.',
+    description: 'Records a pending reference human approval request. Caller must halt: no operator approval API or cross-tool enforcement.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -329,9 +325,21 @@ const TOOLS = [
       },
       required: ['action_hash', 'description', 'risk_level']
     }
+  },
+  {
+    name: 'chat.dashboard.open',
+    description: 'Starts or reuses the opt-in loopback dashboard sharing this reference process. Returns a sensitive capability URL; no browser is opened.',
+    inputSchema: { type: 'object', properties: {} }
   }
 ];
 
+const READ_ONLY_TOOLS = new Set([
+  'chat.health', 'chat.rooms.list', 'chat.history.fetch', 'chat.config.get',
+  'acr_get_dag_state', 'mcp_ast_diff_verify'
+]);
+for (const tool of TOOLS) {
+  tool.annotations = { readOnlyHint: READ_ONLY_TOOLS.has(tool.name), openWorldHint: false };
+}
 const TOOL_BY_NAME = new Map(TOOLS.map(tool => [tool.name, tool]));
 
 const MAX_ARG_DEPTH = 8;
@@ -437,7 +445,7 @@ function handleToolCall(name, args) {
         daemon_connected: false,
         protocol_version: '2.1.0',
         active_rooms: state.rooms.size,
-        consensus_engine: 'BFT-67%-Quorum',
+        consensus_engine: 'reference-two-thirds-tally',
         endpoint: daemonUrl
       };
 
@@ -502,7 +510,8 @@ function handleToolCall(name, args) {
     }
 
     case 'chat.history.fetch': {
-      const msgs = state.messages.get(args.room_id) || [];
+      const msgs = state.messages.get(args.room_id);
+      if (!msgs) return { error: `Room '${args.room_id}' not found` };
       const limit = Math.max(1, Math.min(Math.floor(args.limit || 50), 100));
       return msgs.slice(-limit);
     }
@@ -570,17 +579,19 @@ function handleToolCall(name, args) {
     case 'chat.config.get':
       return {
         protocol_version: '2.1.0',
-        pna_enabled: true,
-        cors_enabled: true,
+        ...state.security,
+        applies_to: 'reference-settings-only',
         default_room: defaultRoom,
         daemon_url: daemonUrl
       };
 
     case 'chat.config.security':
+      if (args.enable_cors !== undefined) state.security.cors_enabled = args.enable_cors;
+      if (args.enable_pna !== undefined) state.security.pna_enabled = args.enable_pna;
       return {
         status: 'UPDATED',
-        cors_enabled: args.enable_cors !== undefined ? args.enable_cors : true,
-        pna_enabled: args.enable_pna !== undefined ? args.enable_pna : true
+        ...state.security,
+        applies_to: 'reference-settings-only'
       };
 
     case 'chat_cast_vote': {
@@ -640,17 +651,15 @@ function handleToolCall(name, args) {
           approvalPercentage: Number((approvalPct * 100).toFixed(2)),
           quorumMet
         },
-        consensusGate: quorumMet ? 'AUTHORIZED' : 'PENDING_QUORUM'
+        consensusGate: quorumMet ? 'REFERENCE_QUORUM_MET' : 'PENDING_QUORUM',
+        production_authorized: false
       };
     }
 
     case 'mcp_ast_diff_verify': {
       return {
-        verified: true,
-        invariance_check: 'PASSED',
-        safety_level: 'HIGH_CONFIDENCE',
-        structural_delta_nodes: Object.keys(args.astJson || {}).length,
-        timestamp: Date.now()
+        verified: false,
+        error: 'AST verification is not implemented by the local reference bridge; no safety authorization is granted.'
       };
     }
 
@@ -714,12 +723,24 @@ function handleToolCall(name, args) {
       const chk = dag.checkpoints.get(args.target_checkpoint_id);
       if (!chk) return { error: `Checkpoint '${args.target_checkpoint_id}' not found.` };
 
-      const rolledBack = [];
-      for (const [nodeId, node] of dag.nodes.entries()) {
-        if (node.id !== chk.nodeId && node.prerequisites.includes(chk.nodeId)) {
-          node.state = 'ROLLED_BACK';
-          rolledBack.push(nodeId);
+      const affected = new Set([chk.nodeId]);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const node of dag.nodes.values()) {
+          if (!affected.has(node.id) && node.prerequisites.some(id => affected.has(id))) {
+            affected.add(node.id);
+            changed = true;
+          }
         }
+      }
+      affected.delete(chk.nodeId);
+      const rolledBack = Array.from(affected);
+      for (const nodeId of rolledBack) {
+        const node = dag.nodes.get(nodeId);
+        node.state = 'ROLLED_BACK';
+        node.outputHash = null;
+        node.checkpointId = null;
       }
 
       return {
@@ -756,9 +777,10 @@ function handleToolCall(name, args) {
       state.humanGates.set(gateId, gate);
       return {
         gateId,
-        status: 'GATE_ENGAGED_FAIL_CLOSED',
+        status: 'PENDING_HUMAN_APPROVAL',
+        enforced: false,
         action_hash: args.action_hash,
-        instructions: 'Autonomous mutation suspended. Awaiting cryptographically signed operator approval before deadline.',
+        instructions: 'Caller must suspend the proposed action. This reference request does not enforce suspension or provide an operator approval API.',
         timeout_sec: gate.timeout_sec
       };
     }
@@ -768,122 +790,152 @@ function handleToolCall(name, args) {
   }
 }
 
-// JSON-RPC 2.0 stdio loop
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-  terminal: false
-});
+let dashboardPromise;
 
-rl.on('line', line => {
-  if (!line.trim()) return;
-
-  let request;
+async function openDashboard() {
+  if (!dashboardPromise) {
+    dashboardPromise = require('./acr-dashboard').startDashboard({ tools: TOOLS, executeTool });
+  }
   try {
-    request = JSON.parse(line);
+    const dashboard = await dashboardPromise;
+    return { url: dashboard.url, mode: 'in-memory-reference', shared_state: true };
   } catch (err) {
-    const errResp = { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } };
-    process.stdout.write(JSON.stringify(errResp) + '\n');
-    return;
+    dashboardPromise = undefined;
+    throw err;
   }
+}
 
-  if (request === null || typeof request !== 'object' || Array.isArray(request)) {
-    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Invalid Request' } }) + '\n');
-    return;
+async function closeDashboard() {
+  if (dashboardPromise) {
+    const dashboard = await dashboardPromise;
+    await dashboard.close();
+    dashboardPromise = undefined;
   }
+}
 
-  const { id, method, params } = request;
-
-  // Handle Notifications
-  if (id === undefined || id === null) {
-    // e.g. notifications/initialized
-    return;
-  }
-
-  if (method === 'initialize') {
-    const response = {
-      jsonrpc: '2.0',
-      id,
-      result: {
-        protocolVersion: '2024-11-05',
-        capabilities: {
-          tools: {}
-        },
-        serverInfo: {
-          name: 'acr-mcp-server',
-          version: '1.0.0'
-        }
-      }
-    };
-    process.stdout.write(JSON.stringify(response) + '\n');
-    return;
-  }
-
-  if (method === 'ping') {
-    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result: {} }) + '\n');
-    return;
-  }
-
-  if (method === 'tools/list') {
-    const response = {
-      jsonrpc: '2.0',
-      id,
-      result: {
-        tools: TOOLS
-      }
-    };
-    process.stdout.write(JSON.stringify(response) + '\n');
-    return;
-  }
-
-  if (method === 'tools/call') {
-    const callParams = params !== null && typeof params === 'object' ? params : {};
-    const toolName = typeof callParams.name === 'string' ? callParams.name : '';
-    const toolArgs = callParams.arguments === undefined || callParams.arguments === null ? {} : callParams.arguments;
-
-    let toolResult;
-    const tool = TOOL_BY_NAME.get(toolName);
-    if (!tool) {
-      toolResult = { error: `Tool '${toolName}' not implemented.` };
-    } else {
-      try {
-        const problem = validateArgs(tool.inputSchema, toolArgs);
-        toolResult = problem ? { error: problem } : handleToolCall(toolName, toolArgs);
-      } catch (err) {
-        toolResult = { error: `Tool '${toolName}' failed.` };
-      }
-    }
-
-    // Serialisation can still fail (for example on an oversized result); never let that kill the server.
-    let text;
+async function executeTool(toolName, toolArgs = {}) {
+  const tool = TOOL_BY_NAME.get(toolName);
+  let toolResult;
+  if (!tool) {
+    toolResult = { error: `Tool '${toolName}' not implemented.` };
+  } else {
     try {
-      text = JSON.stringify(toolResult, null, 2);
+      const problem = validateArgs(tool.inputSchema, toolArgs);
+      toolResult = problem ? { error: problem } :
+        toolName === 'chat.dashboard.open' ? await openDashboard() : handleToolCall(toolName, toolArgs);
     } catch (err) {
-      toolResult = { error: `Tool '${toolName}' produced a result that could not be serialized.` };
-      text = JSON.stringify(toolResult, null, 2);
+      toolResult = { error: `Tool '${toolName}' failed: ${err.message}` };
     }
-
-    const response = {
-      jsonrpc: '2.0',
-      id,
-      result: {
-        content: [
-          {
-            type: 'text',
-            text
-          }
-        ],
-        isError: Boolean(toolResult && toolResult.error)
-      }
-    };
-    process.stdout.write(JSON.stringify(response) + '\n');
-    return;
   }
 
-  // Method not found
-  process.stdout.write(JSON.stringify({
-    jsonrpc: '2.0',
-    id,
-    error: { code: -32601, message: `Method '${method}' not found.` }
-  }) + '\n');
-});
+  let text;
+  try {
+    text = JSON.stringify(toolResult, null, 2);
+  } catch (err) {
+    toolResult = { error: `Tool '${toolName}' produced a result that could not be serialized.` };
+    text = JSON.stringify(toolResult);
+  }
+  return { content: [{ type: 'text', text }], isError: Boolean(toolResult && toolResult.error) };
+}
+
+function startStdio() {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    terminal: false
+  });
+
+  rl.on('close', () => {
+    closeDashboard().catch(err => {
+      console.error(`Dashboard shutdown failed: ${err.message}`);
+      process.exitCode = 1;
+    });
+  });
+  rl.on('line', async line => {
+    if (!line.trim()) return;
+
+    let request;
+    try {
+      request = JSON.parse(line);
+    } catch (err) {
+      const errResp = { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } };
+      process.stdout.write(JSON.stringify(errResp) + '\n');
+      return;
+    }
+
+    if (request === null || typeof request !== 'object' || Array.isArray(request)) {
+      process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Invalid Request' } }) + '\n');
+      return;
+    }
+
+    const { id, method, params } = request;
+
+    // Handle notifications without a response.
+    if (id === undefined || id === null) return;
+
+    if (method === 'initialize') {
+      const response = {
+        jsonrpc: '2.0',
+        id,
+        result: {
+          protocolVersion: '2024-11-05',
+          capabilities: { tools: {} },
+          serverInfo: { name: 'acr-mcp-server', version: '1.0.0' }
+        }
+      };
+      process.stdout.write(JSON.stringify(response) + '\n');
+      return;
+    }
+
+    if (method === 'ping') {
+      process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result: {} }) + '\n');
+      return;
+    }
+
+    if (method === 'tools/list') {
+      process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result: { tools: TOOLS } }) + '\n');
+      return;
+    }
+
+    if (method === 'tools/call') {
+      const callParams = params !== null && typeof params === 'object' ? params : {};
+      const toolName = typeof callParams.name === 'string' ? callParams.name : '';
+      const toolArgs = callParams.arguments === undefined ? {} : callParams.arguments;
+      const response = { jsonrpc: '2.0', id, result: await executeTool(toolName, toolArgs) };
+      process.stdout.write(JSON.stringify(response) + '\n');
+      return;
+    }
+
+    process.stdout.write(JSON.stringify({
+      jsonrpc: '2.0',
+      id,
+      error: { code: -32601, message: `Method '${method}' not found.` }
+    }) + '\n');
+  });
+  return rl;
+}
+
+module.exports = { TOOLS, executeTool, closeDashboard };
+
+if (require.main === module) {
+  let stdio;
+  const shutdown = () => {
+    if (stdio) stdio.close();
+    else closeDashboard().catch(err => {
+      console.error(`Dashboard shutdown failed: ${err.message}`);
+      process.exitCode = 1;
+    });
+  };
+  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown);
+  if (args.includes('--dashboard')) {
+    openDashboard().then(info => {
+      console.log(`ACR local reference dashboard (state is lost on exit):\n${info.url}`);
+    }, err => {
+      console.error(`Dashboard startup failed: ${err.message}`);
+      process.exitCode = 1;
+    });
+  } else {
+    stdio = startStdio();
+  }
+}

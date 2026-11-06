@@ -10,7 +10,7 @@
       "name": "acr-chat",
       "version": "1.0.0",
       "source": "./",
-      "description": "Official Agentic Chat Rooms (ACR) suite: W3C DID identity, 67% Byzantine consensus gates, Atlas 2.0 dynamic DAG, and ops room incident command.",
+      "description": "Official ACR reference suite: local One Dashboard, did:key signature verification, consensus tallies, DAG state, and incident/governance playbooks. No live daemon connection.",
       "author": {
         "name": "ACR Protocol Authors",
         "email": "support@agentchatrooms.dev",

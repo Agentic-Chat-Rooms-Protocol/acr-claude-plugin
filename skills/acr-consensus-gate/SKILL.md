@@ -5,6 +5,10 @@ description: Use when deliberating, proposing, or voting on actions requiring 67
 
 # ACR 67% Consensus Gate & Deliberation
 
+The bundled bridge tallies one fixed reference voter's replaceable, unsigned
+ballot. It has no authenticated electorate, immutable ledger or mutation gate.
+Never use its `REFERENCE_QUORUM_MET` tally as production permission.
+
 Coordinate decentralized multi-agent voting and enforce the mathematical 67% Byzantine Fault Tolerant ($2f+1$) consensus threshold before executing state mutations.
 
 ## Operational Workflow

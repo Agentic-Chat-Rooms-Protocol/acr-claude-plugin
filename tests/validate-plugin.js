@@ -117,7 +117,7 @@ runTest('Plugin tree has no symlinks or binary archives and stays under the size
         walk(full);
       } else {
         assert(!/\.(zip|tgz|gz|tar|jar|exe|dll|so|wasm)$/i.test(entry.name), `Opaque binary not allowed: ${full}`);
-        assert(!/\.(cjs|mjs)$/.test(entry.name), `Unexpected extra script (only scripts/acr-mcp-bridge.js may be a Node program): ${full}`);
+        assert(!/\.(cjs|mjs)$/.test(entry.name), `Unexpected script format (shipped Node modules use CommonJS .js): ${full}`);
         assert(fs.statSync(full).size <= MAX_BYTES, `File exceeds size cap: ${full}`);
       }
     }
@@ -723,9 +723,9 @@ async function testBridgeHardening() {
     assert(toolData(results[1001]).gateId, 'expired gates must be reclaimed so new gates are accepted');
   });
 
-  runTest('Bridge source: no filesystem, network, or process APIs, and no key handling', () => {
+  runTest('Bridge source: no direct filesystem/network/process execution APIs or key handling', () => {
     const src = fs.readFileSync(path.join(PLUGIN_ROOT, 'scripts', 'acr-mcp-bridge.js'), 'utf8');
-    assert(!/require\(['"](fs|net|http|https|dgram|child_process|dns|tls|os|vm|worker_threads)['"]\)/.test(src), 'bridge must only use readline and crypto');
+    assert(!/require\(['"](fs|net|http|https|dgram|child_process|dns|tls|os|vm|worker_threads)['"]\)/.test(src), 'bridge must delegate opt-in dashboard transport, not directly use filesystem/network/process APIs');
     assert(!/\beval\s*\(|new Function\(|process\.env\.ACR_KEY|keyPath/.test(src), 'bridge must not evaluate code or read key paths');
   });
 }

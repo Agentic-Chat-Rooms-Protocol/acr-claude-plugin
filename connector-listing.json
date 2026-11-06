@@ -28,14 +28,15 @@
     "hasTopLevelBin": false
   },
   "features": {
-    "toolsCount": 20,
+    "toolsCount": 21,
     "skillsCount": 6,
     "agentsCount": 3,
     "securityHooks": ["PreToolUse:PostGuard"],
-    "consensusGate": "67% Quorum Gate (2f+1 BFT)",
-    "identity": "W3C DID (did:key Ed25519)",
-    "stateMachine": "Atlas 2.0 Dynamic DAG with Rollback Cascades",
-    "governance": "Fail-Closed Human In-The-Loop Approval Veto"
+    "consensusGate": "Reference two-thirds tally; no production authorization",
+    "identity": "did:key Ed25519 nonce verification; no cross-tool authentication",
+    "stateMachine": "Local DAG prerequisites, hashes and transitive invalidation",
+    "governance": "Pending reference requests; caller-enforced halt",
+    "dashboard": "Opt-in loopback control room sharing all 21 MCP tools and state"
   },
   "submissionStatus": "READY_FOR_PUBLICATION",
   "submittedAt": "2026-11-01T08:12:00Z"
