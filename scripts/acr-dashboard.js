@@ -70,7 +70,11 @@ async function startDashboard({ tools, executeTool }) {
     }
     if (req.headers.host !== new URL(origin).host ||
         (req.headers.origin !== undefined && req.headers.origin !== origin) ||
-        (req.headers['sec-fetch-site'] && !['same-origin', 'none'].includes(req.headers['sec-fetch-site']))) {
+        (req.headers['sec-fetch-site'] && !['same-origin', 'none'].includes(req.headers['sec-fetch-site']) &&
+         !(req.method === 'GET' && req.url === '/' &&
+           req.headers['sec-fetch-mode'] === 'navigate' &&
+           req.headers['sec-fetch-dest'] === 'document' &&
+           req.headers['sec-fetch-user'] === '?1'))) {
       json(403, { error: 'Host or origin is not allowed.' });
       return;
     }
