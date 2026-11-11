@@ -224,7 +224,8 @@ runTest('hooks/hooks.json configuration', () => {
   assert.strictEqual(cmd, '"${CLAUDE_PLUGIN_ROOT}/scripts/postguard-hook.sh"', 'Must run the shell wrapper by a literal ${CLAUDE_PLUGIN_ROOT} path');
   const wrapperPath = path.join(PLUGIN_ROOT, 'scripts', 'postguard-hook.sh');
   assert(fs.existsSync(wrapperPath), 'postguard-hook.sh must exist');
-  assert(fs.statSync(wrapperPath).mode & 0o111, 'postguard-hook.sh must be executable');
+  const isExec = process.platform === 'win32' ? true : (fs.statSync(wrapperPath).mode & 0o111);
+  assert(isExec, 'postguard-hook.sh must be executable');
   const script = fs.readFileSync(wrapperPath, 'utf8');
   assert(script.startsWith('#!/bin/sh'), 'hook must be a plain POSIX shell script');
   const code = script.split('\n').filter(line => !line.trim().startsWith('#')).join('\n');
