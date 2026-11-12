@@ -46,6 +46,9 @@ if printf '%s\n' "$text" | grep -Eq '\\u00[2-7][0-9A-Fa-f]'; then
     code=$((code + 1))
   done
   text=$(printf '%s\n' "$text" | sed -e "$script") || scanner_failure
+else
+  status=$?
+  [ "$status" -eq 1 ] || scanner_failure
 fi
 
 L='(^|[^A-Za-z0-9_])'
