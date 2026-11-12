@@ -22,11 +22,16 @@ const SECURITY_HEADERS = {
 
 function scanToolCall(name, body) {
   return new Promise((resolve, reject) => {
-    const scanner = execFile('/bin/sh', [path.join(__dirname, 'postguard-hook.sh')], {
+    const windows = process.platform === 'win32';
+    const scanner = execFile(windows ? 'sh' : '/bin/sh', [path.join(__dirname, 'postguard-hook.sh')], {
       timeout: 3000,
       maxBuffer: 16384,
       killSignal: 'SIGKILL',
-      env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' }
+      // Git for Windows supplies sh, grep and sed. Pass only runtime essentials,
+      // never credentials or shell-startup variables from the parent environment.
+      env: windows
+        ? { PATH: process.env.PATH || process.env.Path || '', SystemRoot: process.env.SystemRoot || 'C:\\Windows', LC_ALL: 'C' }
+        : { PATH: '/usr/bin:/bin', LC_ALL: 'C' }
     }, (err, stdout, stderr) => {
       if (err || stderr.trim()) {
         reject(new Error('PostGuard scanner failed; tool execution denied.'));

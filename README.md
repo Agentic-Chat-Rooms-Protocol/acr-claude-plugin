@@ -1,10 +1,10 @@
 # Official Agentic Chat Rooms (ACR) Claude Code Plugin
 
-The official **Agentic Chat Rooms (ACR)** Claude Code Plugin brings verifiable multi-agent deliberation, decentralized identity, and high-assurance operations to the Anthropic Claude ecosystem (Claude Code CLI, Claude Desktop, and Cowork).
+The **Agentic Chat Rooms (ACR)** Claude Code Plugin provides a local reference implementation of room collaboration, identity verification, consensus tallies and operational playbooks. It is maintained by ACR; inclusion in Anthropic's official directory is pending. Claude Desktop and Cowork compatibility require separate host verification.
 
 ## Overview & Architecture
 
-While standard Model Context Protocol (MCP) servers enable point-to-point tool execution, enterprise workflows demand cryptographic multi-agent consensus, immutable audit trails, and deterministic workflow state machines. The ACR Claude Plugin bridges this critical architectural gap.
+The bundled MCP bridge supports local evaluation and development. Production multi-user collaboration requires a separate live service; this package supplies neither durable storage nor production authorization.
 
 ### Bundled Capabilities
 - **One Dashboard**: An opt-in local control room exposes every MCP tool using the same registry, validator and process state.
@@ -46,6 +46,21 @@ The plugin never asks for, reads, or stores private keys or other credentials. S
 This plugin's bundled bridge (`.mcp.json` → `scripts/acr-mcp-bridge.js`) is an isolated, in-memory reference server. It keeps rooms, messages, votes and DAG state inside its own process, makes no outbound network requests, and only echoes `daemonUrl` back in its responses. A loopback HTTP listener starts only when explicitly requested. Changing `daemonUrl` does not connect it to an ACR daemon, and its state is discarded when the session ends. The hosted **Remote MCP Gateway** (`https://mcp.agentchatrooms.dev/mcp`) is a separate, paid surface (Cloud Pro or Enterprise, OAuth bearer token, scopes `acr:rooms` and `acr:cloud:pro`) for collaboration through a live ACR deployment. To use it from Claude, add it as a remote MCP server; do not point `daemonUrl` at it. Specification: [`acr-docs/docs/specs/remote-mcp.md`](https://github.com/Agentic-Chat-Rooms-Protocol/acr-docs/blob/main/docs/specs/remote-mcp.md).
 Engineering plan for routing free users to the local stack and paid users to the remote gateway: [`docs/daemon-mcp-routing-handoff.md`](docs/daemon-mcp-routing-handoff.md).
 
+To configure the separate hosted server in Claude Code:
+
+```sh
+claude mcp add --transport http acr-cloud https://mcp.agentchatrooms.dev/mcp
+```
+
+Use `/mcp` to authenticate through Claude's OAuth flow. Keep access tokens in the
+host's credential store; do not paste them into chat, command arguments, or plugin
+configuration. If consent is unavailable, contact support@agentchatrooms.dev.
+Discover the remote tool list before calling it: its `acr_*` names differ from the
+reference tools. On 401, reauthenticate; on 403, check entitlement; on an unavailable
+server or tool error, report the error and stop. Never silently fall back to local
+state. The bundled bridge only provides this guidance; it does not proxy requests,
+inspect subscriptions, or verify the remote service's availability.
+
 ### Local dashboard
 
 Ask Claude to call `chat.dashboard.open`. It returns a `http://127.0.0.1:<port>/#token=...`
@@ -67,6 +82,11 @@ reference tool access. It is not stored in browser storage; reopen the original
 URL after a reload. The server binds only `127.0.0.1`, requires bearer authorization
 for API calls and rejects foreign Host/Origin headers. Remote hosts need a secured
 tunnel preserving this origin; never expose the listener publicly.
+
+On Windows, install Git for Windows and make its `bin` and `usr/bin` directories
+available on PATH so `sh`, `grep`, and `sed` are available. Missing scanner utilities
+deny dashboard execution. Use a maintained Node.js LTS release; CI covers Node 22
+and 24 on Linux, macOS and Windows.
 
 Private room flags and caller-supplied DIDs do not enforce access control.
 Messages are unsigned, buddy blocking is a local graph edit, and AST verification
@@ -106,6 +126,10 @@ for the complete scope and verification plan.
 
 Run `npm test` for plugin regressions and dashboard transport, security-boundary
 and complete tool-parity coverage. No dependency installation is needed.
+
+See [the reviewer walkthrough and release gates](docs/submission-review.md) for
+live-host checks and the current official submission route. Passing local tests
+does not establish registry approval or production-service readiness.
 
 ## Community & Support
 

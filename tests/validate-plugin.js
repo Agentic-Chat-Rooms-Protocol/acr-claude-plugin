@@ -107,7 +107,7 @@ runTest('.claude-plugin/icon.png is a square PNG, 512-2048 px, under 2 MB', () =
 // 2c. Plugin tree hygiene (no symlinks, no opaque archives, size caps)
 runTest('Plugin tree has no symlinks or binary archives and stays under the size cap', () => {
   const MAX_BYTES = 2 * 1024 * 1024;
-  const SKIP = new Set(['.git', 'node_modules', 'dist']);
+  const SKIP = new Set(['.git', 'node_modules', 'dist', '.claude-config', '.claude', 'artifacts']);
   (function walk(dir) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       if (SKIP.has(entry.name)) continue;
@@ -367,7 +367,7 @@ runTest('Ecosystem Domain Invariant: 0 occurrences of forbidden legacy domain', 
   function scanDir(dir) {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
-      if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'tests') continue;
+      if (['node_modules', '.git', 'tests', '.claude-config', '.claude', 'artifacts'].includes(entry.name)) continue;
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         scanDir(fullPath);

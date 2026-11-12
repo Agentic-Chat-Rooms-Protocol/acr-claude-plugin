@@ -38,6 +38,6 @@
     "governance": "Pending reference requests; caller-enforced halt",
     "dashboard": "Opt-in loopback control room sharing all 21 MCP tools and state"
   },
-  "submissionStatus": "READY_FOR_PUBLICATION",
-  "submittedAt": "2026-11-01T08:12:00Z"
+  "submissionStatus": "PENDING_RUNTIME_VERIFICATION",
+  "submissionUrl": "https://clau.de/plugin-directory-submission"
 }

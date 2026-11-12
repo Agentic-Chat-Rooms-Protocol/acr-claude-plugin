@@ -10,7 +10,7 @@
 
 ## 1. Executive Summary & Readiness Assessment
 
-The **Agentic Chat Rooms (ACR)** Claude Plugin brings verifiable multi-agent deliberation, decentralized Ed25519 identity, 67% BFT consensus, Atlas 2.0 DAG coordination, incident response, and fail-closed PreToolUse PostGuard security hook to Anthropic Claude Code and Desktop.
+The **Agentic Chat Rooms (ACR)** Claude Code plugin supplies an ephemeral local reference bridge and operational playbooks. It is not a production multi-user service. Desktop/Cowork support and official directory approval are unverified. Current release evidence and remaining gates: [`docs/submission-review.md`](docs/submission-review.md).
 
 | Surface Area | Current State | Submission Gate Status |
 |---|---|---|
@@ -24,9 +24,9 @@ The **Agentic Chat Rooms (ACR)** Claude Plugin brings verifiable multi-agent del
 | **Context-Isolated Subagents** (`agents/`) | 3 subagents declaring model routing, tools, negative bounds & output contracts | **READY** |
 | **One Dashboard Local Transport** (`dashboard/`) | Loopback-only (`127.0.0.1`), capability token URL hash, shared process state | **READY** |
 | **Ecosystem Domain Invariants** | 100% compliant with `@agentchatrooms.dev` (zero legacy domain references) | **READY** |
-| **Automated CI / Matrix Pipeline** | Local tests pass; needs cross-platform GitHub Actions workflow (Ubuntu, macOS, Windows) | **ACTION REQUIRED** |
+| **Automated CI / Matrix Pipeline** | Workflow supplied for Ubuntu, macOS, Windows and Node 22/24; hosted runs pending | **AWAITING CI EVIDENCE** |
 | **Live Claude Code CLI Verification** | Validated via programmatic harness; needs manual interactive CLI session logs | **ACTION REQUIRED** |
-| **Remote MCP Gateway Routing Handoff** | Bridge operates in-memory; needs clear upgrade routing for Cloud Pro / Enterprise | **ACTION REQUIRED** |
+| **Remote MCP Gateway Routing Handoff** | Health/config and skill provide separate host-managed remote setup; live tests pending | **GUIDANCE IMPLEMENTED** |
 | **Marketplace Submission Review Package** | Submission screencast & reviewer walkthrough notes need packaging | **ACTION REQUIRED** |
 
 ---
@@ -90,17 +90,17 @@ The **Agentic Chat Rooms (ACR)** Claude Plugin brings verifiable multi-agent del
 ## 3. Remaining Action Items for Official Marketplace Submission
 
 ### Priority 1: Cross-Platform CI & Environment Hardening
-- [ ] **Configure GitHub Actions Multi-Platform CI Workflow**
+- [x] **Configure GitHub Actions Multi-Platform CI Workflow**
   - Add `.github/workflows/ci.yml` matrix testing across `ubuntu-latest`, `macos-latest`, and `windows-latest`.
   - Automate execution of `npm test` (`node tests/validate-plugin.js` and `node --test tests/dashboard.test.js`) on every PR and push to `main`.
-- [ ] **Cross-Platform Child Process Execution Hardening**
+- [x] **Cross-Platform Child Process Execution Hardening**
   - In `scripts/acr-dashboard.js`, adapt child process scanner execution to locate `sh` dynamically on Windows (`process.platform === 'win32' ? 'sh' : '/bin/sh'`).
   - Normalize path separators in `tests/dashboard.test.js` to ensure test assertions pass deterministically on both Windows (`\`) and Unix (`/`).
 
 ### Priority 2: Remote MCP Gateway Routing & Handoff
-- [ ] **Subscriber Routing Integration**
+- [x] **Subscriber Routing Guidance** (separate host-managed server; no automatic entitlement resolver)
   - Document client-side resolver instructions according to `docs/daemon-mcp-routing-handoff.md`.
-  - Provide clear in-tool guidance when an operator requests live multi-user deliberation: seamlessly guide them to configure `https://mcp.agentchatrooms.dev/mcp` with their Cloud Pro / Enterprise OAuth token.
+  - Provide clear in-tool guidance when an operator requests live multi-user deliberation: guide them to configure `https://mcp.agentchatrooms.dev/mcp` and authenticate via the host OAuth flow. Never request tokens in chat or plugin settings.
   - Ensure the local reference bridge never masquerades as a live cloud connection or fabricates network telemetry.
 
 ### Priority 3: Live Claude Code CLI End-to-End Verification
@@ -119,6 +119,17 @@ The **Agentic Chat Rooms (ACR)** Claude Plugin brings verifiable multi-agent del
     3. PostGuard security hook intercepting a simulated credential leak.
     4. One Dashboard opening on loopback with shared state.
   - Host video at `https://agentchatrooms.dev/videos/claude-plugin-demo.mp4` or provide private link.
-- [ ] **Marketplace PR Submission**
-  - Submit listing entry to Anthropic's official Claude Plugin Marketplace directory repository once public intake is opened.
+- [ ] **Official Directory Submission**
+  - Current intake is https://clau.de/plugin-directory-submission, as linked by Anthropic's official repository on 2026-11-11. Prepare the evidence and submit through that form after release gates pass.
   - Monitor reviewer inquiries and verification feedback.
+
+## 4. Development verification update (2026-11-11)
+
+- [x] Add package allowlist and exclude local Claude caches from version control and distributable tree checks.
+- [x] Correct unverified publication status and remove the unsupported submission timestamp from listing metadata.
+- [x] Supply reviewer walkthrough, six-skill live test scenarios, recording script and current intake link in `docs/submission-review.md`.
+- [x] Harden direct PostGuard execution to deny on input, decoding or scanner utility errors; add regression tests.
+- [ ] Run authenticated Claude Code walkthrough: installed CLI reports `loggedIn: false`.
+- [ ] Obtain passing hosted OS matrix results, authorized remote-service tests and a real demo recording.
+
+Local harness evidence is recorded in `docs/verification-transcripts/local-validation.txt`; it is not a model-driven Claude transcript. No publication or submission has been performed.

@@ -3,11 +3,16 @@
   "version": "1.0.0",
   "description": "Official Agentic Chat Rooms (ACR) suite plugin for Anthropic Claude Code",
   "main": "./scripts/acr-mcp-bridge.js",
+  "files": [
+    ".claude-plugin/", ".mcp.json", "marketplace.json", "connector-listing.json",
+    "scripts/", "skills/", "agents/", "hooks/", "output-styles/", "dashboard/",
+    "docs/", "tests/", "TODO.md"
+  ],
   "engines": {
     "node": ">=18.8.0"
   },
   "scripts": {
-    "test": "node tests/validate-plugin.js && node --test tests/dashboard.test.js",
+    "test": "node tests/validate-plugin.js && node --test tests/dashboard.test.js tests/routing.test.js tests/hook-failure.test.js",
     "validate": "npm test",
     "dashboard": "node scripts/acr-mcp-bridge.js --dashboard"
   },
