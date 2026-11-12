@@ -10,7 +10,12 @@
 LC_ALL=C
 export LC_ALL
 
-payload=$(cat)
+scanner_failure() {
+  printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"PostGuard scanner failed; tool execution denied."}}'
+  exit 0
+}
+
+payload=$(cat) || scanner_failure
 case $payload in
   *[![:space:]]*) ;;
   *) exit 0 ;;
@@ -22,7 +27,7 @@ esac
 text=$(printf '%s\n' "$payload" | sed \
   -e 's/\\[ntrbf]/ /g' \
   -e 's/\\\//\//g' \
-  -e 's/\\"/"/g')
+  -e 's/\\"/"/g') || scanner_failure
 
 if printf '%s\n' "$text" | grep -Eq '\\u00[2-7][0-9A-Fa-f]'; then
   nl='
@@ -40,7 +45,7 @@ if printf '%s\n' "$text" | grep -Eq '\\u00[2-7][0-9A-Fa-f]'; then
     [ "$upper" = "$lower" ] || script="${script}s/\\\\u00${upper}/${ch}/g${nl}"
     code=$((code + 1))
   done
-  text=$(printf '%s\n' "$text" | sed -e "$script")
+  text=$(printf '%s\n' "$text" | sed -e "$script") || scanner_failure
 fi
 
 L='(^|[^A-Za-z0-9_])'
@@ -60,6 +65,9 @@ deny() {
 check() {
   if printf '%s\n' "$text" | grep -E${4:+i}q -e "$3"; then
     deny "$1" "$2"
+  else
+    status=$?
+    [ "$status" -eq 1 ] || scanner_failure
   fi
 }
 

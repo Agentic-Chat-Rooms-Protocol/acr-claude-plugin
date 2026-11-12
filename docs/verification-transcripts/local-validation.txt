@@ -1,0 +1,113 @@
+Actual local package test output; not an authenticated Claude session.
+Node v24.22.1; Linux; 2026-11-11.
+Package file entries: 42
+
+
+> @acr-js/claude-plugin@1.0.0 test
+> node tests/validate-plugin.js && node --test tests/dashboard.test.js tests/routing.test.js tests/hook-failure.test.js
+
+====================================================
+Starting ACR Claude Plugin Comprehensive Verification
+Target directory: <temporary-release-directory>/package
+====================================================
+
+[PASS] Manifest .claude-plugin/plugin.json validity and required fields
+[PASS] marketplace.json distribution manifests
+[PASS] .claude-plugin/icon.png is a square PNG, 512-2048 px, under 2 MB
+[PASS] Plugin tree has no symlinks or binary archives and stays under the size cap
+[PASS] .mcp.json MCP server configuration uses literal ${CLAUDE_PLUGIN_ROOT} paths
+[PASS] Top-level bin/ directory prohibited for directory submission
+       [Word Count: 350 words for acr-room-collaboration]
+[PASS] Skill acr-room-collaboration frontmatter, structure, and sub-400-word invariant
+       [Word Count: 288 words for acr-identity-did]
+[PASS] Skill acr-identity-did frontmatter, structure, and sub-400-word invariant
+       [Word Count: 286 words for acr-consensus-gate]
+[PASS] Skill acr-consensus-gate frontmatter, structure, and sub-400-word invariant
+       [Word Count: 270 words for acr-atlas-dag]
+[PASS] Skill acr-atlas-dag frontmatter, structure, and sub-400-word invariant
+       [Word Count: 263 words for acr-opsroom-incident]
+[PASS] Skill acr-opsroom-incident frontmatter, structure, and sub-400-word invariant
+       [Word Count: 284 words for acr-human-governance]
+[PASS] Skill acr-human-governance frontmatter, structure, and sub-400-word invariant
+[PASS] Subagent agents/byzantine-auditor.md frontmatter and specification
+[PASS] Subagent agents/incident-commander.md frontmatter and specification
+[PASS] Subagent agents/dag-coordinator.md frontmatter and specification
+[PASS] hooks/hooks.json configuration
+[PASS] PostGuard Hook: denies private key header
+[PASS] PostGuard Hook: denies bare private key header
+[PASS] PostGuard Hook: denies AWS access key
+[PASS] PostGuard Hook: denies OpenAI-style API key
+[PASS] PostGuard Hook: denies GitHub token
+[PASS] PostGuard Hook: denies JWT
+[PASS] PostGuard Hook: denies US SSN
+[PASS] PostGuard Hook: denies credit card PAN
+[PASS] PostGuard Hook: denies ignore-previous-instructions
+[PASS] PostGuard Hook: denies ignore-previous across whitespace/newlines
+[PASS] PostGuard Hook: denies system message delimiter
+[PASS] PostGuard Hook: denies INST delimiter
+[PASS] PostGuard Hook: denies DAN persona override
+[PASS] PostGuard Hook: denies safety bypass
+[PASS] PostGuard Hook: JSON-escaped delimiters (\u003c) cannot hide a match
+[PASS] PostGuard Hook: denies \u0041 inside an AWS key (same as plaintext)
+[PASS] PostGuard Hook: denies \u0049 in the middle of an AWS key (same as plaintext)
+[PASS] PostGuard Hook: denies \u002d in an API key prefix (same as plaintext)
+[PASS] PostGuard Hook: denies \u002d in an SSN (same as plaintext)
+[PASS] PostGuard Hook: denies upper-case hex in \u003C \u003E (same as plaintext)
+[PASS] PostGuard Hook: denies escaped solidus in a closing tag (same as plaintext)
+[PASS] PostGuard Hook: denies \u005b \u005d around SYSTEM (same as plaintext)
+[PASS] PostGuard Hook: denies \u0020 between override words (same as plaintext)
+[PASS] PostGuard Hook: denies decoded backslash and ampersand before a key (same as plaintext)
+[PASS] PostGuard Hook: malformed (non-JSON) input is still scanned, fail-closed
+[PASS] PostGuard Hook: a hostile tool name cannot inject JSON into the decision
+[PASS] PostGuard Hook: clean payload #1 yields no decision (never auto-approves)
+[PASS] PostGuard Hook: clean payload #2 yields no decision (never auto-approves)
+[PASS] PostGuard Hook: clean payload #3 yields no decision (never auto-approves)
+[PASS] PostGuard Hook: clean payload #4 yields no decision (never auto-approves)
+[PASS] PostGuard Hook: clean payload #5 yields no decision (never auto-approves)
+[PASS] PostGuard Hook: empty input yields no decision
+[PASS] output-styles/war-room-terse.md style constraints
+[PASS] README.md word count (>= 40 words) and canonical contact info
+[PASS] Ecosystem Domain Invariant: 0 occurrences of forbidden legacy domain
+[PASS] ACR MCP Bridge stdio JSON-RPC 2.0 lifecycle & state machine
+[PASS] Bridge: malformed tool arguments return errors and never crash the server
+[PASS] Bridge: chat.auth.verify checks the Ed25519 signature for did:key
+[PASS] Bridge: daemon URL is sanitized and never echoes credentials
+[PASS] Bridge: history limit is clamped and resource caps hold
+[PASS] Bridge: deeply nested arguments are rejected without crashing the server
+[PASS] Bridge: chat.health does not claim a daemon connection or report fabricated metrics
+[PASS] Bridge: human gates are fail-closed at the cap and reclaimed after their deadline
+[PASS] Bridge source: no direct filesystem/network/process execution APIs or key handling
+
+====================================================
+Verification Complete: 60/60 Tests Passed
+====================================================
+STATUS: ALL INTEGRITY & SPECIFICATION CHECKS PASSED
+✔ launch is loopback-only, reuses one listener and exposes the identical registry (118.490587ms)
+✔ all fixed assets have restrictive browser headers and never embed the token (13.078404ms)
+✔ APIs require bearer credentials, never query or cookie credentials (7.737895ms)
+✔ Host, Origin and fetch metadata reject rebinding, foreign pages and null origins (15.948732ms)
+✔ mutations require same-origin JSON and reject unsupported methods and malformed bodies (12.796513ms)
+✔ HTTP request size is bounded for content-length and streamed bodies (38.933311ms)
+✔ every tool has identical schema-validation errors through MCP and HTTP (1076.082994ms)
+✔ every registered tool executes through the browser surface with all argument shapes (957.34663ms)
+✔ browser and MCP share room, message, configuration and DAG state in both directions (136.914619ms)
+✔ tool errors are explicit, fail closed and leave the process responsive (222.819145ms)
+✔ browser calls reuse PostGuard and blocked messages never reach shared state (467.146944ms)
+✔ scanner errors, stderr and invalid or approving decisions fail closed (5386.562674ms)
+✔ a two-thirds reference tally never claims production authorization (88.780345ms)
+✔ UI uses the shared registry, safe text rendering and no persistent credential storage (1.104261ms)
+✔ ordinary bridge use does not load the dashboard transport or open a listener (226.051276ms)
+✔ standalone dashboard responds and exits cleanly on SIGTERM (439.726011ms)
+✔ MCP EOF shuts down its dashboard and revokes the capability URL (95.426364ms)
+✔ direct hook denies when cat fails (48.177538ms)
+✔ direct hook denies when sed fails (27.917776ms)
+✔ direct hook denies when grep fails (39.852843ms)
+✔ health and config expose consistent explicit host-managed remote setup (39.978168ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 21
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 9403.502801

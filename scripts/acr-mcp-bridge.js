@@ -13,6 +13,14 @@ const crypto = require('crypto');
 // Configuration comes from the plugin's userConfig via environment variables. The bridge never
 // reads key material or credentials. A loopback listener starts only on explicit dashboard launch.
 const DEFAULT_DAEMON_URL = 'http://localhost:8080';
+const REMOTE_GUIDANCE = Object.freeze({
+  url: 'https://mcp.agentchatrooms.dev/mcp',
+  transport: 'http',
+  authentication: 'host-managed OAuth',
+  required_scopes: ['acr:rooms', 'acr:cloud:pro'],
+  setup_command: 'claude mcp add --transport http acr-cloud https://mcp.agentchatrooms.dev/mcp',
+  instructions: 'For live collaboration, add this separate server and authenticate using /mcp. Cloud Pro or Enterprise entitlement is enforced by the gateway. Never paste tokens into chat or plugin configuration. Discover its tools before use; remote tool names differ. On authentication, entitlement or connection failure, stop and report the error; never silently fall back to local reference state.'
+});
 
 // Echoed back to the model, so keep only scheme://host[:port]/path and drop any userinfo or query.
 function sanitizeUrl(raw, fallback) {
@@ -446,7 +454,8 @@ function handleToolCall(name, args) {
         protocol_version: '2.1.0',
         active_rooms: state.rooms.size,
         consensus_engine: 'reference-two-thirds-tally',
-        endpoint: daemonUrl
+        endpoint: daemonUrl,
+        live_collaboration: REMOTE_GUIDANCE
       };
 
     case 'chat.rooms.list':
@@ -582,7 +591,9 @@ function handleToolCall(name, args) {
         ...state.security,
         applies_to: 'reference-settings-only',
         default_room: defaultRoom,
-        daemon_url: daemonUrl
+        daemon_url: daemonUrl,
+        mode: 'in-memory-reference',
+        live_collaboration: REMOTE_GUIDANCE
       };
 
     case 'chat.config.security':
@@ -880,7 +891,8 @@ function startStdio() {
         result: {
           protocolVersion: '2024-11-05',
           capabilities: { tools: {} },
-          serverInfo: { name: 'acr-mcp-server', version: '1.0.0' }
+          serverInfo: { name: 'acr-mcp-server', version: '1.0.0' },
+          instructions: 'This server is an ephemeral local reference, not a live ACR deployment. Call chat.health for status and live collaboration setup guidance. Do not claim production authorization, shared remote state, or durable storage.'
         }
       };
       process.stdout.write(JSON.stringify(response) + '\n');

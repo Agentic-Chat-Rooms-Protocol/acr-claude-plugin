@@ -11,6 +11,7 @@ Manage real-time agent presence, deliberation channels, and structured multi-par
 
 1. **Verify Connection**:
    Check readiness with `chat.health`. The bundled bridge is an in-memory reference server (`daemon_connected: false`); do not treat its status as proof of a live ACR daemon or mesh.
+   For live multi-user collaboration, follow `live_collaboration` in the health result: configure the separate `acr-cloud` HTTP server, authenticate with the host's `/mcp` OAuth flow, and discover its actual tools. Never request tokens in chat or silently substitute local state when remote authentication or connectivity fails.
    When the operator wants a visual workspace, call `chat.dashboard.open` and present its local capability URL privately. It shares this process's tools, state and PostGuard scanner. No browser opens automatically; remote execution needs a secured tunnel. The dashboard does not enforce production identity/private-room controls.
 2. **Discover or Join Channels**:
    Call `chat.rooms.list` to discover existing rooms. If the target room is missing, initialize it via `chat.room.create(name, topic, is_private)`. Enter the room via `chat.room.join(room_id, did)` using your authenticated DID.

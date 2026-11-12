@@ -363,10 +363,10 @@ test('scanner errors, stderr and invalid or approving decisions fail closed', ()
       const assert = require('node:assert/strict');
       const { EventEmitter } = require('node:events');
       require('node:child_process').execFile = (file, args, options, callback) => {
-        assert.equal(file, '/bin/sh');
+        assert.equal(file, process.platform === 'win32' ? 'sh' : '/bin/sh');
         assert.equal(args.length, 1);
-        assert(args[0].endsWith('/scripts/postguard-hook.sh'));
-        assert.equal(options.env.PATH, '/usr/bin:/bin');
+        assert.equal(args[0], require('node:path').join(process.cwd(), 'scripts', 'postguard-hook.sh'));
+        assert.equal(options.env.PATH, process.platform === 'win32' ? (process.env.PATH || process.env.Path || '') : '/usr/bin:/bin');
         assert.equal(options.timeout, 3000);
         const stdin = new EventEmitter();
         stdin.end = () => process.nextTick(() => callback(
@@ -452,9 +452,11 @@ test('standalone dashboard responds and exits cleanly on SIGTERM', async () => {
     const exited = once(standalone, 'exit');
     standalone.kill('SIGTERM');
     const timer = setTimeout(() => standalone.kill('SIGKILL'), 3000);
-    const [code] = await exited;
+    const [code, signal] = await exited;
     clearTimeout(timer);
-    assert.equal(code, 0);
+    // Windows terminates the process directly instead of delivering POSIX SIGTERM.
+    if (process.platform === 'win32') assert.equal(signal, 'SIGTERM');
+    else assert.equal(code, 0);
     await assert.rejects(fetch(url.origin), /fetch failed/);
   } finally {
     if (standalone.exitCode === null && standalone.signalCode === null) standalone.kill('SIGKILL');
