@@ -150,6 +150,6 @@ does not establish registry approval or production-service readiness.
 
 The bundled `acr-cloud` HTTP connection uses Claude-managed Clerk OAuth. Authenticate in `/mcp`; no Clerk backend API key belongs in plugin configuration. The registered resource is exactly `https://mcp.agentchatrooms.dev/mcp`.
 
-Use `/acr-chat:acr-room`, `/acr-chat:acr-workflow`, and `/acr-chat:acr-consensus`. Commands discover the authenticated tool surface before dispatch. See [all 18 workflow IDs and configuration semantics](docs/workflows.md). Cloud OAuth exposes user-scoped live tools; the operator deliberation surface is an isolated legacy simulation. A missing tool is a capability limitation, not a reason to substitute reference state.
+Use `/acr-chat:acr-room`, `/acr-chat:acr-workflow`, and `/acr-chat:acr-consensus`. Commands discover the authenticated tool surface before dispatch. See [all 18 workflow IDs and configuration semantics](docs/workflows.md). The shared Cloud contract covers workflow discovery, room creation, configuration, stored status, messaging, ballot events, and account quota. Use Claude’s local dashboard for a disposable reference session. Live tool availability is determined at sign-in. A missing tool is a capability limitation, not a reason to substitute reference state.
 
 401 requires reauthentication; 403 `subscription_required` requires billing/entitlement resolution, not extra OAuth scopes; 503 means verification is unavailable. Stop on these errors.

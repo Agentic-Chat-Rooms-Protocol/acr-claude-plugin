@@ -1,5 +1,8 @@
 # Dev handoff: applying the Claude plugin store hardening to `acr-chatgpt-plugin`
 
+> Historical review of commit 5b6b230. For current cross-platform behavior, see the [Cloud workflow contract](workflows.md). Both hosts use the Clerk-authenticated gateway with profile/email scopes. The ChatGPT source at 8154cfe documents 11 Cloud tools. Claude additionally supplies 21 local reference tools, a loopback dashboard, subagents and a PreToolUse hook.
+
+
 Audience: the engineer who owns [`acr-chatgpt-plugin`](https://github.com/Agentic-Chat-Rooms-Protocol/acr-chatgpt-plugin).
 Source of lessons: this repository, rounds 1–2 of Anthropic Plugin Store preparation (PR #1 and the round-2 hardening PR).
 Reviewed: `acr-chatgpt-plugin` at commit `5b6b230`. Nothing in that repo was executed; it was read only.

@@ -1,8 +1,8 @@
 # Workflow bootstrap catalog
 
-These are workflow identifiers, not a claim that RFC numbers are sequential. The gateway currently stores workflow metadata on its operator deliberation surface; it does not execute every workflow engine or validate a workflow-specific configuration schema. Cloud OAuth may not expose `acr_create_room`. Always discover tools and report unsupported capabilities.
+For offline browsing, [workflow-catalog.json](workflow-catalog.json) includes canonical IDs, preset aliases, configuration schemas and defaults. This snapshot comes from the [shared Cloud contract at 8154cfe](https://github.com/Agentic-Chat-Rooms-Protocol/acr-chatgpt-plugin/tree/8154cfe). Confirm available capabilities with the installed `acr-cloud` connection before sending a request.
 
-Pass `name` (3–64 characters), optional `is_private` (boolean, default false), `workflow_type` and `workflow_config` (JSON object) to the discovered `acr_create_room` tool. Preserve configuration values; never invent defaults or claim operational completion from a room receipt. Private-room authorization must be verified on the actual service.
+Create a room with a 3–64 character name. The documented default workflow is `bft-consensus-deliberation`. All Cloud rooms are owner-scoped. The optional `is_private` flag records visibility intent. Supply partial overrides from the selected template schema. Replacing an existing room's workflow resets its stored template state and requires confirmation. Workflow responses describe stored configuration and state with `execution_supported: false`.
 
 | Workflow | Preset alias | Description |
 |---|---|---|
