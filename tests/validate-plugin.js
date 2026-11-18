@@ -221,7 +221,7 @@ runTest('hooks/hooks.json configuration', () => {
   assert(hooks.hooks && hooks.hooks.PreToolUse, 'PreToolUse hook must be declared');
   const preHook = hooks.hooks.PreToolUse[0];
   const cmd = preHook.hooks[0].command;
-  assert.strictEqual(cmd, '"${CLAUDE_PLUGIN_ROOT}/scripts/postguard-hook.sh"', 'Must run the shell wrapper by a literal ${CLAUDE_PLUGIN_ROOT} path');
+  assert.strictEqual(cmd, 'node "${CLAUDE_PLUGIN_ROOT}/scripts/postguard-event.js"', 'Must run the shell wrapper by a literal ${CLAUDE_PLUGIN_ROOT} path');
   const wrapperPath = path.join(PLUGIN_ROOT, 'scripts', 'postguard-hook.sh');
   assert(fs.existsSync(wrapperPath), 'postguard-hook.sh must exist');
   const isExec = process.platform === 'win32' ? true : (fs.statSync(wrapperPath).mode & 0o111);
@@ -238,7 +238,7 @@ runTest('hooks/hooks.json configuration', () => {
 // 8. PostGuard Hook behavioral tests (the shell script is the only implementation)
 function runHook(payload, raw) {
   const { spawnSync } = require('child_process');
-  return spawnSync('sh', [path.join(PLUGIN_ROOT, 'scripts', 'postguard-hook.sh')], {
+  return spawnSync(process.execPath, [path.join(PLUGIN_ROOT, 'scripts', 'postguard-event.js')], {
     input: raw !== undefined ? raw : JSON.stringify(payload),
     encoding: 'utf8',
     env: { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT }
@@ -319,6 +319,7 @@ runTest('PostGuard Hook: a hostile tool name cannot inject JSON into the decisio
 });
 
 const CLEAN_CASES = [
+  { tool_name: 'Read', tool_input: { file_path: 'notes.md' }, cwd: '/tmp/fixture/123-45-6789' },
   { tool_name: 'Bash', tool_input: { command: 'ls -la' } },
   { tool_name: 'chat.message.send', tool_input: { room_id: 'general', sender_did: 'did:key:z6MkuV4ACRSystemGenesis1', content: 'Reviewing proposal #prop_99 for consensus deliberation.' } },
   { tool_name: 'Read', tool_input: { file_path: '/home/u/notes.txt' }, session_id: '6c1e2f3a-1111-4222-8333-444455556666' },
@@ -334,10 +335,10 @@ CLEAN_CASES.forEach((payload, i) => {
   });
 });
 
-runTest('PostGuard Hook: empty input yields no decision', () => {
+runTest('PostGuard Hook: empty event is denied', () => {
   const res = runHook(null, '');
   assert.strictEqual(res.status, 0);
-  assert.strictEqual(res.stdout.trim(), '');
+  assert.strictEqual(JSON.parse(res.stdout).hookSpecificOutput.permissionDecision, 'deny');
 });
 
 // 9. Output style validation

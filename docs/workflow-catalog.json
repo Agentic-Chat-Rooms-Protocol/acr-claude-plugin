@@ -1,0 +1,493 @@
+{
+  "schemaVersion": "1.0",
+  "registryRevision": "8dd4ce1",
+  "workflows": [
+    {
+      "id": "postgres-split-brain",
+      "preset_id": "preset-postgres-split-brain",
+      "name": "PostgreSQL Read-Replica Lag & Split-Brain Mitigation",
+      "category": "Infrastructure & DB",
+      "protocol_reference": "RFC-0016 / RFC-0002",
+      "intent": "Isolate lagging follower db-replica-03 and route read traffic to healthy secondary replica read-replica-01.",
+      "config_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "drainGraceSec": {
+            "type": "number",
+            "description": "Time allocated to finish in-flight read queries before detaching follower replica.",
+            "default": 5,
+            "minimum": 0,
+            "maximum": 60
+          },
+          "failoverTarget": {
+            "type": "string",
+            "description": "Target secondary replica to receive read traffic redirect.",
+            "default": "read-replica-01",
+            "enum": [
+              "read-replica-01",
+              "read-replica-02",
+              "db-standby-sync"
+            ]
+          }
+        }
+      },
+      "default_config": {
+        "drainGraceSec": 5,
+        "failoverTarget": "read-replica-01"
+      },
+      "execution_supported": false
+    },
+    {
+      "id": "egress-token-anomaly",
+      "preset_id": "preset-egress-anomaly",
+      "name": "Suspicious Egress Volume & Token Quarantine",
+      "category": "SecOps & Zero-Trust",
+      "protocol_reference": "RFC-0018 / RFC-0021 / Onyxbox",
+      "intent": "Quarantine compromised worker pod, revoke leaked Autovault token, and shift egress traffic to verified mesh gateway.",
+      "config_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "quarantineNamespace": {
+            "type": "string",
+            "description": "Cluster namespace where compromised pod is executing.",
+            "default": "mesh-workers",
+            "maxLength": 2000
+          },
+          "cascadeTokenRevocation": {
+            "type": "boolean",
+            "description": "Whether to invalidate all downstream API tokens minted by this token.",
+            "default": true
+          }
+        }
+      },
+      "default_config": {
+        "quarantineNamespace": "mesh-workers",
+        "cascadeTokenRevocation": true
+      },
+      "execution_supported": false
+    },
+    {
+      "id": "ingress-oom-autoscaling",
+      "preset_id": "preset-ingress-oom",
+      "name": "Ingress OOM Recovery & Dynamic Autoscaling",
+      "category": "Cloud & Compute",
+      "protocol_reference": "RFC-0016 / ToolHive",
+      "intent": "Patch Traefik memory allocation ceiling (+1.5 GiB) and scale deployment replicas from 4 to 12.",
+      "config_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "targetReplicas": {
+            "type": "number",
+            "description": "Horizontal pod scale target for load rebalancing.",
+            "default": 12,
+            "minimum": 1,
+            "maximum": 50
+          },
+          "memoryLimit": {
+            "type": "string",
+            "description": "Memory ceiling string per pod container resource spec.",
+            "default": "2.5Gi",
+            "maxLength": 2000
+          }
+        }
+      },
+      "default_config": {
+        "targetReplicas": 12,
+        "memoryLimit": "2.5Gi"
+      },
+      "execution_supported": false
+    },
+    {
+      "id": "canary-deployment-rollback",
+      "preset_id": "preset-canary-rollback",
+      "name": "Canary Rollout & Automated Checkpoint Rollback",
+      "category": "CI/CD & Rollout",
+      "protocol_reference": "RFC-0016 / RFC-0012 / Atlas 2.0",
+      "intent": "Drain canary gateway traffic, verify baseline cluster health, and trigger deterministic rollback to stable release v2.4.0.",
+      "config_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "targetReleaseVersion": {
+            "type": "string",
+            "description": "Known stable image tag or semantic version for rollback.",
+            "default": "v2.4.0",
+            "maxLength": 2000
+          }
+        }
+      },
+      "default_config": {
+        "targetReleaseVersion": "v2.4.0"
+      },
+      "execution_supported": false
+    },
+    {
+      "id": "code-review-tla-verification",
+      "preset_id": "preset-code-review-tla",
+      "name": "AST Diff Code Review & TLA+ Deadlock Proof",
+      "category": "Quality & Formal Methods",
+      "protocol_reference": "RFC-0002 / TLA+ / Agentflex",
+      "intent": "Run deterministic AST parsing, invoke TLC model checker on ACRCompositionSafety.tla, and record review consensus.",
+      "config_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "tlaWorkers": {
+            "type": "number",
+            "description": "Number of parallel threads for TLC state space exploration.",
+            "default": 4,
+            "minimum": 1,
+            "maximum": 32
+          }
+        }
+      },
+      "default_config": {
+        "tlaWorkers": 4
+      },
+      "execution_supported": false
+    },
+    {
+      "id": "saif-compliance-audit",
+      "preset_id": "preset-saif-audit",
+      "name": "SAIF Compliance & WASI Fuel Budget Audit",
+      "category": "Compliance & Security",
+      "protocol_reference": "RFC-0018 / RFC-0019 / SAIF",
+      "intent": "Audit WASI runtime fuel consumption, clamp container capability bitmask, and emit tamper-evident SOC2 audit proof.",
+      "config_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "complianceFramework": {
+            "type": "string",
+            "description": "Regulatory compliance framework for emitted audit proofs.",
+            "default": "SAIF-Core-v2",
+            "enum": [
+              "SAIF-Core-v2",
+              "SOC2-Type-II",
+              "ISO-27001-AI",
+              "NIST-AI-RMF"
+            ]
+          }
+        }
+      },
+      "default_config": {
+        "complianceFramework": "SAIF-Core-v2"
+      },
+      "execution_supported": false
+    },
+    {
+      "id": "bft-consensus-deliberation",
+      "preset_id": "preset-bft-deliberation",
+      "name": "BFT Multi-Agent Deliberation & 67% Quorum Gate",
+      "category": "Governance & Consensus",
+      "protocol_reference": "RFC-0002 / RFC-0012 / GAP-08",
+      "intent": "Facilitate adversarial deliberation between Claude, GPT, and Gemini agents, capture signed ballots, and enforce 2/3 BFT supermajority.",
+      "config_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "quorumThreshold": {
+            "type": "number",
+            "description": "Supermajority fraction required to pass proposal.",
+            "default": 0.67,
+            "minimum": 0.51,
+            "maximum": 1
+          }
+        }
+      },
+      "default_config": {
+        "quorumThreshold": 0.67
+      },
+      "execution_supported": false
+    },
+    {
+      "id": "twinseal-passkey-approval",
+      "preset_id": "preset-twinseal-consent",
+      "name": "Twinseal Passkey Dual-Consent Approval Gate",
+      "category": "Human-in-the-Loop",
+      "protocol_reference": "RFC-0012 / WebAuthn / Twinseal",
+      "intent": "Issue cryptographic consent challenge, park execution runner in fail-closed state, and verify dual WebAuthn signatures.",
+      "config_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "challengeTtlSec": {
+            "type": "number",
+            "description": "Time window during which human commanders must complete passkey gesture.",
+            "default": 300,
+            "minimum": 30,
+            "maximum": 1800
+          }
+        }
+      },
+      "default_config": {
+        "challengeTtlSec": 300
+      },
+      "execution_supported": false
+    },
+    {
+      "id": "durable-wal-recovery",
+      "preset_id": "preset-durable-wal-recovery",
+      "name": "Durable WAL Recovery & Idempotency Reconcile",
+      "category": "Data & Engine Lifecycles",
+      "protocol_reference": "RFC-0016 / DurableCommandWal / ADR-0041",
+      "intent": "Inspect append-only WAL, detect DISPATCHED state prior to crash, probe external API, and reconcile without duplicating mutations.",
+      "config_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "reconcileTimeoutMs": {
+            "type": "number",
+            "description": "Maximum latency wait for upstream provider response before declaring OUTCOME_UNKNOWN.",
+            "default": 5000,
+            "minimum": 500,
+            "maximum": 30000
+          }
+        }
+      },
+      "default_config": {
+        "reconcileTimeoutMs": 5000
+      },
+      "execution_supported": false
+    },
+    {
+      "id": "context-compaction-pruning",
+      "preset_id": "preset-context-compaction",
+      "name": "Context Compaction & Trajectory Thought Pruning",
+      "category": "Memory & Context Engineering",
+      "protocol_reference": "RFC-0015 / RFC-0020 / ADK 2.0",
+      "intent": "Prune intermediate chain-of-thought traces, summarize conversation milestones into a CompactedEvent, and verify checkpoint manifests.",
+      "config_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "retainedTurnCount": {
+            "type": "number",
+            "description": "Number of active recent events to preserve verbatim after compaction.",
+            "default": 2,
+            "minimum": 1,
+            "maximum": 20
+          }
+        }
+      },
+      "default_config": {
+        "retainedTurnCount": 2
+      },
+      "execution_supported": false
+    },
+    {
+      "id": "byzantine-fault-slashing",
+      "preset_id": "preset-byzantine-slashing",
+      "name": "Byzantine Fault Detection & Rogue Agent Slashing",
+      "category": "Security & Reputation",
+      "protocol_reference": "RFC-0014 / RFC-0021",
+      "intent": "Detect cryptographic signature equivocation, revoke agent mesh delegation, and slash Wilson confidence score.",
+      "config_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "slashPenaltyRatio": {
+            "type": "number",
+            "description": "Proportion of Wilson confidence interval to deduct upon proven Byzantine infraction.",
+            "default": 0.5,
+            "minimum": 0.05,
+            "maximum": 1
+          }
+        }
+      },
+      "default_config": {
+        "slashPenaltyRatio": 0.5
+      },
+      "execution_supported": false
+    },
+    {
+      "id": "identity-key-rotation",
+      "preset_id": "preset-identity-rotation",
+      "name": "Continuous DID Key Rotation Chain",
+      "category": "Identity & Key Management",
+      "protocol_reference": "RFC-0013 / W3C DID Core",
+      "intent": "Generate dual-signed rotation envelope linking old and new Ed25519 keys, verify continuous provenance, and update DID document.",
+      "config_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "cryptographicCurve": {
+            "type": "string",
+            "description": "Elliptic curve algorithm for new key generation.",
+            "default": "Ed25519",
+            "enum": [
+              "Ed25519",
+              "Secp256k1",
+              "P-256"
+            ]
+          }
+        }
+      },
+      "default_config": {
+        "cryptographicCurve": "Ed25519"
+      },
+      "execution_supported": false
+    },
+    {
+      "id": "micro-sandbox-isolation",
+      "preset_id": "preset-micro-sandbox",
+      "name": "Onyxbox Micro-Sandbox Provisioning & Auto-Purge",
+      "category": "Process Isolation & Runtime",
+      "protocol_reference": "RFC-0018 / Onyxbox / ToolHive",
+      "intent": "Spawn ephemeral micro-container with network lockdown, execute untrusted tool payload, and verify automated 15-minute purge sweep.",
+      "config_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "autoPurgeMinutes": {
+            "type": "number",
+            "description": "Hard TTL before micro-sandbox container is forcefully destroyed.",
+            "default": 15,
+            "minimum": 1,
+            "maximum": 60
+          }
+        }
+      },
+      "default_config": {
+        "autoPurgeMinutes": 15
+      },
+      "execution_supported": false
+    },
+    {
+      "id": "cross-model-agentflex-synthesis",
+      "preset_id": "preset-agentflex-synthesis",
+      "name": "Cross-Model Agentflex Plan Synthesis & Critique",
+      "category": "Cognitive Architecture",
+      "protocol_reference": "RFC-0002 / Agentflex",
+      "intent": "Gather parallel plan proposals from 3 frontier model families, execute pairwise critique matrices, and synthesize unified consensus plan.",
+      "config_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "critiqueRounds": {
+            "type": "number",
+            "description": "Iterations of dialectical peer critique before synthesizing final plan.",
+            "default": 2,
+            "minimum": 1,
+            "maximum": 5
+          }
+        }
+      },
+      "default_config": {
+        "critiqueRounds": 2
+      },
+      "execution_supported": false
+    },
+    {
+      "id": "declarative-step-playbook",
+      "preset_id": "preset-declarative-playbook",
+      "name": "Declarative Step Playbook & Gate Parking",
+      "category": "Workflow Automation",
+      "protocol_reference": "RFC-0016 / PlaybookRun",
+      "intent": "Compile playbook steps into content-addressed hash, step through automated agent tasks, and park execution safely at approval gates.",
+      "config_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "stopOnFirstError": {
+            "type": "boolean",
+            "description": "Halt the entire playbook sequence immediately if any step returns non-zero error.",
+            "default": true
+          }
+        }
+      },
+      "default_config": {
+        "stopOnFirstError": true
+      },
+      "execution_supported": false
+    },
+    {
+      "id": "postguard-injection-defense",
+      "preset_id": "preset-postguard-firewall",
+      "name": "Postguard Prompt Injection & Jailbreak Firewall",
+      "category": "Prompt & Content Security",
+      "protocol_reference": "RFC-0019 / Postguard / SAIF",
+      "intent": "Inspect incoming prompt strings, detect prompt-injection token anomalies, block pre-model inference dispatch, and record audit evidence.",
+      "config_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "sensitivityLevel": {
+            "type": "string",
+            "description": "Anomaly score threshold for dropping suspect prompt turns.",
+            "default": "strict",
+            "enum": [
+              "permissive",
+              "balanced",
+              "strict",
+              "paranoid"
+            ]
+          }
+        }
+      },
+      "default_config": {
+        "sensitivityLevel": "strict"
+      },
+      "execution_supported": false
+    },
+    {
+      "id": "dynamic-dag-topology",
+      "preset_id": "preset-dynamic-dag-topology",
+      "name": "Dynamic DAG Scheduling & JoinNode Barrier",
+      "category": "Graph Scheduling",
+      "protocol_reference": "RFC-0016 / ADK 2.0 / JCS RFC 8785",
+      "intent": "Validate acyclic topology via 3-color DFS, schedule parallel worker branches, synchronize at JoinNode barrier, and verify deterministic topology hash.",
+      "config_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "maxParallelWorkers": {
+            "type": "number",
+            "description": "Maximum parallel branch concurrency limit.",
+            "default": 4,
+            "minimum": 1,
+            "maximum": 16
+          }
+        }
+      },
+      "default_config": {
+        "maxParallelWorkers": 4
+      },
+      "execution_supported": false
+    },
+    {
+      "id": "transitive-trust-federation",
+      "preset_id": "preset-trust-federation",
+      "name": "Transitive Web of Trust & Peer BFS Federation",
+      "category": "Identity & Trust Federation",
+      "protocol_reference": "RFC-0017 / Web of Trust",
+      "intent": "Evaluate decentralized peer-to-peer transitive trust via Ed25519-signed endorsements, depth-bounded BFS traversal (max depth 3), and signature chain attestation.",
+      "config_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "maxBfsDepth": {
+            "type": "number",
+            "description": "Maximum depth for transitive trust BFS path evaluation (RFC-0017 default 3, max 8).",
+            "default": 3,
+            "minimum": 1,
+            "maximum": 8
+          },
+          "requireDoubleSigning": {
+            "type": "boolean",
+            "description": "Require both old and new keys to sign rotation links.",
+            "default": true
+          }
+        }
+      },
+      "default_config": {
+        "maxBfsDepth": 3,
+        "requireDoubleSigning": true
+      },
+      "execution_supported": false
+    }
+  ]
+}

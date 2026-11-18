@@ -18,8 +18,7 @@ const REMOTE_GUIDANCE = Object.freeze({
   transport: 'http',
   authentication: 'host-managed OAuth',
   required_scopes: ['profile', 'email'],
-  setup_command: 'claude mcp add --transport http acr-cloud https://mcp.agentchatrooms.dev/mcp',
-  instructions: 'For live collaboration, add this separate server and authenticate using /mcp. Cloud Pro or Enterprise entitlement is enforced by the gateway. Never paste tokens into chat or plugin configuration. Discover its tools before use; remote tool names differ. On authentication, entitlement or connection failure, stop and report the error; never silently fall back to local reference state.'
+  instructions: 'For live collaboration, select the installed acr-cloud connection in /mcp and authenticate. Cloud Pro or Enterprise entitlement is enforced by the gateway. Never paste tokens into chat or plugin configuration. Discover its tools before use; remote tool names differ. On authentication, entitlement or connection failure, stop and report the error; never silently fall back to local reference state.'
 });
 
 // Echoed back to the model, so keep only scheme://host[:port]/path and drop any userinfo or query.

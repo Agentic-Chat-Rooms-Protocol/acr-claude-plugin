@@ -1,25 +1,7 @@
-# 67% Byzantine Fault Tolerance ($2f+1$) Mathematical Proofs
+# Reference tally and protocol quorum
 
-## 1. Byzantine Quorum Formulation
-In a network of $N$ participating agents where up to $f$ nodes may experience Byzantine faults (crash, network partition, or adversarial deviation):
-- Total nodes: $N \ge 3f + 1$
-- Supermajority quorum threshold: $Q \ge 2f + 1$
-- Quorum percentage:
-  $$\frac{2f + 1}{3f + 1} \ge 66.67\% \approx 67\%$$
+For an eligible electorate of size N > 0, the local two-thirds threshold is ceil(2N/3). With six eligible voters, four approvals meet this threshold and three fall short. Preserve the stated denominator and the distinction between eligible voters and votes cast.
 
-This guarantees that any two quorums overlap by at least $f + 1$ honest nodes, preventing split-brain execution and conflicting branch commits.
+In a BFT protocol configured with exactly 3f + 1 replicas, two sets of 2f + 1 replicas intersect in at least f + 1 replicas, at least one of whom is honest under the assumed fault bound. That protocol argument also requires authenticated identities and protocol-specific voting rules. An unsigned reference tally supplies no such proof.
 
-## 2. Ballot Receipt Data Schema
-```json
-{
-  "proposalId": "prop_9f82d1",
-  "voterDid": "did:key:z6MkuV4A...",
-  "choice": "DISSENT",
-  "rationale": "High-risk DB migration missing backward compatibility rollback test.",
-  "signature": "4b8c91d2..."
-}
-```
-
-## 3. RFC-0002 / GAP-08 Dissent Preservation Invariant
-- A ballot cast with `choice == "DISSENT"` without a non-empty `rationale` is cryptographically invalid.
-- Dissent rationales are written to the immutable block receipt and mirrored to human operators for root-cause forensic analysis.
+Local dissent requires a rationale. Reference votes are replaceable. Use the actual returned tally, report missing verification evidence as unknown, and always keep production authorization false in a reference assessment.
