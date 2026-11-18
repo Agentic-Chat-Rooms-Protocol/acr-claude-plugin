@@ -24,7 +24,7 @@ The **Agentic Chat Rooms (ACR)** Claude Code plugin supplies an ephemeral local 
 | **Context-Isolated Subagents** (`agents/`) | 3 subagents declaring model routing, tools, negative bounds & output contracts | **READY** |
 | **One Dashboard Local Transport** (`dashboard/`) | Loopback-only (`127.0.0.1`), capability token URL hash, shared process state | **READY** |
 | **Ecosystem Domain Invariants** | 100% compliant with `@agentchatrooms.dev` (zero legacy domain references) | **READY** |
-| **Automated CI / Matrix Pipeline** | Workflow supplied for Ubuntu, macOS, Windows and Node 22/24; hosted runs pending | **AWAITING CI EVIDENCE** |
+| **Automated CI / Matrix Pipeline** | Ubuntu, macOS and Windows on Node 22/24 passed at 23bd1f1 | **VERIFIED** |
 | **Live Claude Code CLI Verification** | Validated via programmatic harness; needs manual interactive CLI session logs | **ACTION REQUIRED** |
 | **Remote MCP Gateway Routing Handoff** | Health/config and skill provide separate host-managed remote setup; live tests pending | **GUIDANCE IMPLEMENTED** |
 | **Marketplace Submission Review Package** | Submission screencast & reviewer walkthrough notes need packaging | **ACTION REQUIRED** |
@@ -120,7 +120,7 @@ The **Agentic Chat Rooms (ACR)** Claude Code plugin supplies an ephemeral local 
     4. One Dashboard opening on loopback with shared state.
   - Host video at `https://agentchatrooms.dev/videos/claude-plugin-demo.mp4` or provide private link.
 - [ ] **Official Directory Submission**
-  - Current intake is https://clau.de/plugin-directory-submission, as linked by Anthropic's official repository on 2026-11-11. Prepare the evidence and submit through that form after release gates pass.
+  - Current intake is https://claude.ai/directory/manage, as linked by Anthropic's official repository on 2026-11-17. Prepare the evidence and submit through that form after release gates pass.
   - Monitor reviewer inquiries and verification feedback.
 
 ## 4. Development verification update (2026-11-11)
@@ -130,7 +130,7 @@ The **Agentic Chat Rooms (ACR)** Claude Code plugin supplies an ephemeral local 
 - [x] Supply reviewer walkthrough, six-skill live test scenarios, recording script and current intake link in `docs/submission-review.md`.
 - [x] Harden direct PostGuard execution to deny on input, decoding or scanner utility errors; add regression tests.
 - [ ] Run authenticated Claude Code walkthrough: installed CLI reports `loggedIn: false`.
-- [ ] Obtain passing hosted OS matrix results, authorized remote-service tests and a real demo recording.
+- [ ] Obtain authorized remote-service tests and a real demo recording.
 
 Local harness evidence is recorded in `docs/verification-transcripts/local-validation.txt`; it is not a model-driven Claude transcript. No publication or submission has been performed.
 
