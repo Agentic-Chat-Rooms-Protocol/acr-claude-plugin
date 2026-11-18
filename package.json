@@ -4,9 +4,20 @@
   "description": "Official Agentic Chat Rooms (ACR) suite plugin for Anthropic Claude Code",
   "main": "./scripts/acr-mcp-bridge.js",
   "files": [
-    ".claude-plugin/", ".mcp.json", "marketplace.json", "connector-listing.json",
-    "scripts/", "skills/", "agents/", "hooks/", "output-styles/", "dashboard/",
-    "docs/", "tests/", "TODO.md"
+    ".claude-plugin/",
+    ".mcp.json",
+    "marketplace.json",
+    "connector-listing.json",
+    "scripts/",
+    "skills/",
+    "agents/",
+    "hooks/",
+    "output-styles/",
+    "dashboard/",
+    "docs/",
+    "tests/",
+    "TODO.md",
+    "commands/"
   ],
   "engines": {
     "node": ">=18.8.0"

@@ -12,6 +12,13 @@
         "ACR_TELEMETRY": "off",
         "ACR_NPM_ORG": "@acr-js"
       }
+    },
+    "acr-cloud": {
+      "type": "http",
+      "url": "https://mcp.agentchatrooms.dev/mcp",
+      "headers": {
+        "Accept": "application/json, text/event-stream"
+      }
     }
   }
 }

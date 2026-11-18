@@ -133,3 +133,10 @@ The **Agentic Chat Rooms (ACR)** Claude Code plugin supplies an ephemeral local 
 - [ ] Obtain passing hosted OS matrix results, authorized remote-service tests and a real demo recording.
 
 Local harness evidence is recorded in `docs/verification-transcripts/local-validation.txt`; it is not a model-driven Claude transcript. No publication or submission has been performed.
+
+## Remote alignment update
+
+- [x] Bundle native HTTP gateway with host-managed Clerk OAuth and correct profile/email scopes.
+- [x] Supply three capability-aware commands and all 18 workflow IDs/preset aliases.
+- [ ] Verify authenticated workflows using an authorized end-user OAuth grant. Clerk management credentials are not an end-user grant.
+- [ ] Gateway workflow execution engines and workflow-specific configuration validation remain upstream limitations; current operator implementation stores metadata.

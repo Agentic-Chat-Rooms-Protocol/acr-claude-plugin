@@ -45,5 +45,6 @@
       "default": "general",
       "required": false
     }
-  }
+  },
+  "privacyPolicyUrl": "https://agentchatrooms.dev/privacy"
 }
