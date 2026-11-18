@@ -112,9 +112,41 @@ async function startDashboard({ tools, executeTool }) {
       json(403, { error: 'Same-origin application/json request required.' });
       return;
     }
-    if (Number(req.headers['content-length']) > MAX_BODY_BYTES) {
+    const maxDrainBytes = MAX_BODY_BYTES * 8;
+    const drainOverflowAndReject = async () => {
+      // Drain moderately oversized payloads before closing so loopback TCP buffers do not RST mid-write.
+      const deadline = Date.now() + 150;
+      let drained = 0;
+      req.on('data', (chunk) => {
+        drained += chunk.length;
+        if (drained > maxDrainBytes || Date.now() > deadline) {
+          req.destroy();
+        }
+      });
+      await new Promise((resolve) => {
+        const timer = setTimeout(resolve, 150);
+        const done = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        req.once('end', done);
+        req.once('close', done);
+        req.once('error', done);
+        req.resume();
+      });
+      if (!res.writableEnded) {
+        res.setHeader('Connection', 'close');
+        json(413, { error: 'Request exceeds 256 KiB.' });
+      }
+    };
+    const contentLength = Number(req.headers['content-length']);
+    if (contentLength > maxDrainBytes) {
       res.setHeader('Connection', 'close');
       json(413, { error: 'Request exceeds 256 KiB.' });
+      return;
+    }
+    if (contentLength > MAX_BODY_BYTES) {
+      await drainOverflowAndReject();
       return;
     }
     try {
@@ -123,8 +155,7 @@ async function startDashboard({ tools, executeTool }) {
       for await (const chunk of req) {
         size += chunk.length;
         if (size > MAX_BODY_BYTES) {
-          res.setHeader('Connection', 'close');
-          json(413, { error: 'Request exceeds 256 KiB.' });
+          await drainOverflowAndReject();
           return;
         }
         chunks.push(chunk);

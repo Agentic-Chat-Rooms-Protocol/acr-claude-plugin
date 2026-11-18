@@ -14,5 +14,5 @@ test('health and config expose consistent explicit host-managed remote setup', a
   assert.equal(remote.authentication, 'host-managed OAuth');
   assert.match(remote.instructions, /never silently fall back/i);
   assert.match(remote.instructions, /remote tool names differ/i);
-  assert.deepEqual(remote.required_scopes, ['acr:rooms', 'acr:cloud:pro']);
+  assert.deepEqual(remote.required_scopes, ['profile', 'email']);
 });

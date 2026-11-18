@@ -12,12 +12,12 @@ const crypto = require('crypto');
 
 // Configuration comes from the plugin's userConfig via environment variables. The bridge never
 // reads key material or credentials. A loopback listener starts only on explicit dashboard launch.
-const DEFAULT_DAEMON_URL = 'http://localhost:8080';
+const DEFAULT_DAEMON_URL = 'http://127.0.0.1:20443';
 const REMOTE_GUIDANCE = Object.freeze({
   url: 'https://mcp.agentchatrooms.dev/mcp',
   transport: 'http',
   authentication: 'host-managed OAuth',
-  required_scopes: ['acr:rooms', 'acr:cloud:pro'],
+  required_scopes: ['profile', 'email'],
   setup_command: 'claude mcp add --transport http acr-cloud https://mcp.agentchatrooms.dev/mcp',
   instructions: 'For live collaboration, add this separate server and authenticate using /mcp. Cloud Pro or Enterprise entitlement is enforced by the gateway. Never paste tokens into chat or plugin configuration. Discover its tools before use; remote tool names differ. On authentication, entitlement or connection failure, stop and report the error; never silently fall back to local reference state.'
 });

@@ -30,22 +30,8 @@ text=$(printf '%s\n' "$payload" | sed \
   -e 's/\\"/"/g') || scanner_failure
 
 if printf '%s\n' "$text" | grep -Eq '\\u00[2-7][0-9A-Fa-f]'; then
-  nl='
-'
-  script=
-  code=32
-  while [ "$code" -le 126 ]; do
-    ch=$(printf "\\$(printf '%03o' "$code")")
-    case $ch in
-      '\'|'&'|'/') ch="\\$ch" ;;
-    esac
-    lower=$(printf '%02x' "$code")
-    upper=$(printf '%02X' "$code")
-    script="${script}s/\\\\u00${lower}/${ch}/g${nl}"
-    [ "$upper" = "$lower" ] || script="${script}s/\\\\u00${upper}/${ch}/g${nl}"
-    code=$((code + 1))
-  done
-  text=$(printf '%s\n' "$text" | sed -e "$script") || scanner_failure
+  # Single-invocation static BRE table avoids subshells in the hot ASCII decode path.
+  text=$(printf '%s\n' "$text" | sed -e 's/\\u0020/ /g;s/\\u0021/!/g;s/\\u0022/"/g;s/\\u0023/#/g;s/\\u0024/$/g;s/\\u0025/%/g;s/\\u0026/\&/g;s/\\u0027/'\''/g;s/\\u0028/(/g;s/\\u0029/)/g;s/\\u002[aA]/*/g;s/\\u002[bB]/+/g;s/\\u002[cC]/,/g;s/\\u002[dD]/-/g;s/\\u002[eE]/./g;s/\\u002[fF]/\//g;s/\\u0030/0/g;s/\\u0031/1/g;s/\\u0032/2/g;s/\\u0033/3/g;s/\\u0034/4/g;s/\\u0035/5/g;s/\\u0036/6/g;s/\\u0037/7/g;s/\\u0038/8/g;s/\\u0039/9/g;s/\\u003[aA]/:/g;s/\\u003[bB]/;/g;s/\\u003[cC]/</g;s/\\u003[dD]/=/g;s/\\u003[eE]/>/g;s/\\u003[fF]/?/g;s/\\u0040/@/g;s/\\u0041/A/g;s/\\u0042/B/g;s/\\u0043/C/g;s/\\u0044/D/g;s/\\u0045/E/g;s/\\u0046/F/g;s/\\u0047/G/g;s/\\u0048/H/g;s/\\u0049/I/g;s/\\u004[aA]/J/g;s/\\u004[bB]/K/g;s/\\u004[cC]/L/g;s/\\u004[dD]/M/g;s/\\u004[eE]/N/g;s/\\u004[fF]/O/g;s/\\u0050/P/g;s/\\u0051/Q/g;s/\\u0052/R/g;s/\\u0053/S/g;s/\\u0054/T/g;s/\\u0055/U/g;s/\\u0056/V/g;s/\\u0057/W/g;s/\\u0058/X/g;s/\\u0059/Y/g;s/\\u005[aA]/Z/g;s/\\u005[bB]/[/g;s/\\u005[cC]/\\/g;s/\\u005[dD]/]/g;s/\\u005[eE]/^/g;s/\\u005[fF]/_/g;s/\\u0060/`/g;s/\\u0061/a/g;s/\\u0062/b/g;s/\\u0063/c/g;s/\\u0064/d/g;s/\\u0065/e/g;s/\\u0066/f/g;s/\\u0067/g/g;s/\\u0068/h/g;s/\\u0069/i/g;s/\\u006[aA]/j/g;s/\\u006[bB]/k/g;s/\\u006[cC]/l/g;s/\\u006[dD]/m/g;s/\\u006[eE]/n/g;s/\\u006[fF]/o/g;s/\\u0070/p/g;s/\\u0071/q/g;s/\\u0072/r/g;s/\\u0073/s/g;s/\\u0074/t/g;s/\\u0075/u/g;s/\\u0076/v/g;s/\\u0077/w/g;s/\\u0078/x/g;s/\\u0079/y/g;s/\\u007[aA]/z/g;s/\\u007[bB]/{/g;s/\\u007[cC]/|/g;s/\\u007[dD]/}/g;s/\\u007[eE]/~/g') || scanner_failure
 else
   status=$?
   [ "$status" -eq 1 ] || scanner_failure
