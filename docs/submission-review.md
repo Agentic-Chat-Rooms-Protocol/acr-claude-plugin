@@ -20,11 +20,11 @@ Never treat reference tests as evidence about that service.
 2. Run `npm test`. This exercises stdio lifecycle, all tool families, Ed25519
    verification, limits, governance timeout, dashboard parity, origin/authentication
    boundaries, scanner failures and remote-setup guidance.
-3. Run `claude plugin validate .` and `claude plugin validate .claude-plugin/plugin.json`.
+3. Run `claude plugin validate --strict --profile directory .` and `claude plugin validate --strict --profile directory .claude-plugin/plugin.json`.
    These are structural checks; Claude's directory also performs safety and policy review.
 4. Run `npm pack --dry-run` and verify the package excludes developer caches and
    credentials. Test the extracted artifact using `npm test` before release.
-5. Require successful GitHub Actions results on all six OS/Node combinations.
+5. Verify CI for the release revision. Commit 23bd1f1 passed all [six hosted CI jobs](https://github.com/Agentic-Chat-Rooms-Protocol/acr-claude-plugin/actions/runs/44244838810).
 
 ## Authenticated Claude Code walkthrough
 
@@ -65,10 +65,10 @@ No recording or hosted URL is claimed by this document.
 
 ## Official directory intake
 
-As verified on 2026-11-11, Anthropic's
+As verified on 2026-11-17, Anthropic's
 [official repository](https://github.com/anthropics/claude-plugins-official#contributing)
 directs third-party plugins to the
-[submission form](https://clau.de/plugin-directory-submission), not an unsolicited PR.
+[submission form](https://claude.ai/directory/manage), not an unsolicited PR.
 Prepare the repository URL, immutable release commit, description, license,
 support/security contacts, test evidence, runtime requirements and demo URL.
 Retain the `acr-chat` slug after publication. No official submission has been
@@ -76,7 +76,7 @@ performed by this development task.
 
 ## Outstanding external evidence
 
-- Passing hosted CI matrix results (workflow is supplied; not run here).
+
 - Authenticated Claude Code skill/hook/discovery transcripts.
 - Live gateway 401/403, outage and tool-error tests using an authorized account.
 - Sanitized demo recording and hosting.

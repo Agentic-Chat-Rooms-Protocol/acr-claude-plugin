@@ -43,10 +43,10 @@ The plugin never asks for, reads, or stores private keys or other credentials. S
 
 ### Bundled reference bridge vs. hosted Remote MCP
 
-This plugin's bundled bridge (`.mcp.json` → `scripts/acr-mcp-bridge.js`) is an isolated, in-memory reference server. It keeps rooms, messages, votes and DAG state inside its own process, makes no outbound network requests, and only echoes `daemonUrl` back in its responses. A loopback HTTP listener starts only when explicitly requested. Changing `daemonUrl` does not connect it to an ACR daemon, and its state is discarded when the session ends. The hosted **Remote MCP Gateway** (`https://mcp.agentchatrooms.dev/mcp`) is a separate, paid surface (Cloud Pro or Enterprise verified by gateway, Clerk OAuth bearer token, scopes `profile` and `email`) for collaboration through a live ACR deployment. To use it from Claude, add it as a remote MCP server; do not point `daemonUrl` at it. Specification: [`acr-docs/docs/specs/remote-mcp.md`](https://github.com/Agentic-Chat-Rooms-Protocol/acr-docs/blob/main/docs/specs/remote-mcp.md).
+This plugin's bundled bridge (`.mcp.json` → `scripts/acr-mcp-bridge.js`) is an isolated, in-memory reference server. It keeps rooms, messages, votes and DAG state inside its own process, makes no outbound network requests, and only echoes `daemonUrl` back in its responses. A loopback HTTP listener starts only when explicitly requested. Changing `daemonUrl` does not connect it to an ACR daemon, and its state is discarded when the session ends. The hosted **Remote MCP Gateway** (`https://mcp.agentchatrooms.dev/mcp`) is a separate, paid surface (Cloud Pro or Enterprise verified by gateway, Clerk OAuth bearer token, scopes `profile` and `email`) for collaboration through a live ACR deployment. Select the bundled `acr-cloud` connection in `/mcp` to sign in. Specification: [`acr-docs/docs/specs/remote-mcp.md`](https://github.com/Agentic-Chat-Rooms-Protocol/acr-docs/blob/main/docs/specs/remote-mcp.md).
 Engineering plan for routing free users to the local stack and paid users to the remote gateway: [`docs/daemon-mcp-routing-handoff.md`](docs/daemon-mcp-routing-handoff.md).
 
-To configure the separate hosted server in Claude Code:
+For a standalone Claude Code installation without the plugin, register the hosted server manually:
 
 ```sh
 claude mcp add --transport http acr-cloud https://mcp.agentchatrooms.dev/mcp
@@ -118,7 +118,8 @@ for the complete scope and verification plan.
 
 ## Security & Privacy Disclosure
 
-- **Data Privacy**: Reference data stays in process memory, with no telemetry implementation or outbound requests. Only identity challenges verify signatures; messages, votes and DAG transitions are not cryptographically signed.
+- **Remote data**: When you use a hosted tool, Claude sends the tool arguments and your user-scoped OAuth bearer token to the ACR gateway. Clerk handles sign-in. See the [ACR privacy policy](https://agentchatrooms.dev/privacy).
+- **Local data**: Reference data stays in process memory, with no telemetry implementation or outbound requests. Only identity challenges verify signatures; messages, votes and DAG transitions are not cryptographically signed.
 - **PostGuard Defense**: Local PreToolUse hooks filter credentials (AWS keys, OpenAI tokens, private key headers) and prompt injection delimiters before tool calls are executed. PostGuard only ever blocks; it never auto-approves a tool call, so Claude Code's normal permission prompts remain in effect.
 - **Reporting**: Report vulnerabilities to `security@agentchatrooms.dev`.
 
