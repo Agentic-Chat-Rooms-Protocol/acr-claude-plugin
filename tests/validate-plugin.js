@@ -677,7 +677,7 @@ async function testBridgeHardening() {
 
     const fallback = await runBridgeSession({ ACR_DAEMON_URL: 'file:///etc/passwd' }, [callTool('chat.health', {})]);
     const fbText = fallback[0].result.content[0].text;
-    assert(!fbText.includes('/etc/passwd') && fbText.includes('http://localhost:8080'), 'non-http(s) URL must fall back to the default');
+    assert(!fbText.includes('/etc/passwd') && fbText.includes('http://127.0.0.1:20443'), 'non-http(s) URL must fall back to the default');
   });
 
   await runAsyncTest('Bridge: history limit is clamped and resource caps hold', async () => {

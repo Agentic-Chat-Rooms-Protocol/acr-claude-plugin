@@ -12,7 +12,7 @@ const crypto = require('crypto');
 
 // Configuration comes from the plugin's userConfig via environment variables. The bridge never
 // reads key material or credentials. A loopback listener starts only on explicit dashboard launch.
-const DEFAULT_DAEMON_URL = 'http://localhost:8080';
+const DEFAULT_DAEMON_URL = 'http://127.0.0.1:20443';
 const REMOTE_GUIDANCE = Object.freeze({
   url: 'https://mcp.agentchatrooms.dev/mcp',
   transport: 'http',
