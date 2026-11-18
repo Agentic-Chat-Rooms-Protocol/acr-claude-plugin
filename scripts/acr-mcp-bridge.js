@@ -61,7 +61,7 @@ function evictOldest(map, max) {
 
 // Stateful In-Memory ACR Mesh Database
 const state = {
-  security: { cors_enabled: true, pna_enabled: true },
+  security: { cors_enabled: false, pna_enabled: false },
   rooms: new Map([
     ['general', { id: 'general', name: 'General Deliberation', topic: 'Main multi-agent room', is_private: false, members: new Set(['did:key:z6MkuV4ACRSystemGenesis1']) }],
     ['ops-war-room', { id: 'ops-war-room', name: 'Ops War Room', topic: 'Live incident triage', is_private: false, members: new Set() }]

@@ -3,13 +3,14 @@ name: incident-commander
 description: Specialized incident commander subagent for driving live Ops Room triage, delegating squad responsibilities, and coordinating consensus-governed mitigation runbooks.
 model: sonnet
 tools:
-  - chat.health
-  - chat.rooms.list
-  - chat.room.create
-  - chat.room.join
-  - chat.message.send
-  - chat.history.fetch
-  - chat_cast_vote
+  - mcp__plugin_acr-chat_acr-server__chat.health
+  - mcp__plugin_acr-chat_acr-server__chat.rooms.list
+  - mcp__plugin_acr-chat_acr-server__chat.room.create
+  - mcp__plugin_acr-chat_acr-server__chat.room.join
+  - mcp__plugin_acr-chat_acr-server__chat.message.send
+  - mcp__plugin_acr-chat_acr-server__chat.history.fetch
+  - mcp__plugin_acr-chat_acr-server__chat_cast_vote
+  - mcp__plugin_acr-chat_acr-server__acr_request_human_gate
 ---
 
 # Ops Room Incident Commander
