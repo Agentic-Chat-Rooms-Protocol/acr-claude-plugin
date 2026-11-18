@@ -47,7 +47,7 @@ server, and tests that lock all of this in.
 
 Work on a branch (for example `chore/store-readiness-round-1`) and commit after each step.
 
-### Step 1 — Remove committed artifacts (F1)
+### Step 1 - Remove committed artifacts (F1)
 
 ```bash
 git rm dist/acr-protocol-openai-plugin-v1.0.0.zip publication-receipt.json
@@ -63,29 +63,29 @@ mkdir -p dist && git archive --format=zip --prefix=acr-protocol-openai-plugin/ -
 
 Then delete `scripts/bundle-submission.mjs` and the `bundle` script in `package.json`. In this repo the bundler was removed
 for the same reason; it also removes a Node program that a reviewer would otherwise have to read.
-**Verify:** `git ls-files | grep -E '\.(zip|tgz|gz)$|receipt'` prints nothing.
+**Verify** - `git ls-files | grep -E '\.(zip|tgz|gz)$|receipt'` prints nothing.
 
-### Step 2 — Make `connector-listing.json` truthful (F2)
+### Step 2 - Make `connector-listing.json` truthful (F2)
 
 - Delete `distribution.package` and `distribution.sizeBytes` (they describe a file that no longer exists).
 - Replace `domainVerification.status: "VERIFIED"` and any `submissionStatus`-style fields with `"PENDING"` until the
   registry actually confirms them. Never set success states by hand.
 - Keep only facts a script can re-derive from the tree (tool count, skill count, paths).
 
-**Verify:** every path named in the file exists (`node -e` is fine for a local one-off; put the check in Step 9's test).
+**Verify** - every path named in the file exists (`node -e` is fine for a local one-off; put the check in Step 9's test).
 
-### Step 3 — Remove the credential read (F3)
+### Step 3 - Remove the credential read (F3)
 
 `mcp.json` tells the platform to read `ACR_CLOUD_TOKEN` from the installer's environment and send it as a bearer header.
 That is the same credential-read-plus-send pattern the Anthropic validator held this plugin for in round 2. This plugin
 resolved it by removing every credential read; it now accepts no key paths or secrets at all.
 
 1. Delete the `api_key_profile` block. Rely on the interactive OAuth 2.1 flow, where ChatGPT stores and attaches the token.
-2. If non-interactive / autonomous use is a real requirement, *Confirm* how OpenAI expects a user-supplied key to be
+2. If non-interactive / headless use is a real requirement, *Confirm* how OpenAI expects a user-supplied key to be
    declared (a connector setting the user types in, not an environment read) and document it in the README.
 3. Never ship a token, even an example, in any manifest.
 
-### Step 4 — Fix or confirm the OAuth fields (F4)
+### Step 4 - Fix or confirm the OAuth fields (F4)
 
 `client_url` pointing at `/authorize` and `authorization_url` pointing at `/token` look reversed.
 
@@ -95,7 +95,7 @@ resolved it by removing every credential read; it now accepts no key paths or se
 3. `authorization_servers` lists a second entry, `https://mcp.agentchatrooms.dev/oauth`. Keep it only if that is a real issuer.
 4. Run one end-to-end sign-in in a test workspace; a swapped URL fails at the first token exchange.
 
-### Step 5 — Replace placeholder assets with the real logo kit (F5)
+### Step 5 - Replace placeholder assets with the real logo kit (F5)
 
 Source of truth: [`acr-logos`](https://github.com/Agentic-Chat-Rooms-Protocol/acr-logos).
 
@@ -107,16 +107,16 @@ Source of truth: [`acr-logos`](https://github.com/Agentic-Chat-Rooms-Protocol/ac
 5. For reference, the Claude icon is a 1024×1024 RGBA PNG (about 127 KB) exported from the kit's `logo-alt-gradient.png`.
    Anthropic's limits are 512–2048 px square, PNG/JPEG, under 2 MB; SVG and WebP are rejected.
 
-**Verify:** `file assets/*.png` shows plausible dimensions; `sha256sum assets/*.png` shows no duplicates.
+**Verify** - `file assets/*.png` shows plausible dimensions; `sha256sum assets/*.png` shows no duplicates.
 
-### Step 6 — Review manifest fields that assert facts (F8)
+### Step 6 - Review manifest fields that assert facts (F8)
 
 - `domain_verification.token`: confirm that it is a public challenge value served from the site's `.well-known` path and not
   a secret. If it is a secret, rotate it and move it out of the repo.
 - `demo_recording_url`: request it (`curl -sI <url>`) and keep it only if it returns 200. Otherwise remove the field.
 - Keep `homepage`, `repository`, `license` and contact fields identical to `package.json` and the README.
 
-### Step 7 — Harden the canvas app (F6)
+### Step 7 - Harden the canvas app (F6)
 
 `web-ui/canvas-app.html` is a visual mock.
 
@@ -129,7 +129,7 @@ Source of truth: [`acr-logos`](https://github.com/Agentic-Chat-Rooms-Protocol/ac
    preview in `description` so the listing does not over-promise.
 5. No network calls from the canvas; all data comes through the host.
 
-### Step 8 — Re-audit tool annotations (F7)
+### Step 8 - Re-audit tool annotations (F7)
 
 All 15 tools set `destructiveHint: false`. Reclassify state-changing, hard-to-reverse tools. At minimum review
 `acr_rotate_keys` (identity change), `acr_escalate_human_review`, `acr_update_goal_status`, `acr_cast_vote` and
@@ -137,7 +137,7 @@ All 15 tools set `destructiveHint: false`. Reclassify state-changing, hard-to-re
 (`acr_list_rooms`, `acr_get_messages`, `acr_get_agent_did`, `acr_verify_message_sig`, `acr_get_consensus_state`,
 `acr_get_goal_dag`). *Confirm* OpenAI's definition of each hint.
 
-### Step 9 — Package and README hygiene (F9)
+### Step 9 - Package and README hygiene (F9)
 
 - Remove `"main": "index.js"` or point it at a real file. This package ships no library entry point.
 - README: remove `npm run bundle`; list only `npm run validate` and `npm test`.
@@ -146,7 +146,7 @@ All 15 tools set `destructiveHint: false`. Reclassify state-changing, hard-to-re
 - Add a short Security & Privacy section stating that the plugin never asks for or stores private keys, and give the
   `security@agentchatrooms.dev` address.
 
-### Step 10 — Add tests that lock this in (F10)
+### Step 10 - Add tests that lock this in (F10)
 
 Add to `tests/plugin.test.mjs` (`node:test`):
 
@@ -204,7 +204,7 @@ test('listing metadata does not assert unverified status', () => {
 
 Adjust the tool-annotation path (`tool.annotations`) to the file's actual shape. Run `npm test`.
 
-### Step 11 — Server-side work (gateway repo, not this one)
+### Step 11 - Server-side work (gateway repo, not this one)
 
 The Claude bridge's pre-hardening behaviour is a cautionary example for the gateway behind the `acr_*` tools. Check that the
 gateway does the following, and add contract tests on its side:

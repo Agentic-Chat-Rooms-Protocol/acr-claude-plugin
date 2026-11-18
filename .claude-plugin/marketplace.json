@@ -10,7 +10,7 @@
       "name": "acr-chat",
       "version": "1.0.0",
       "source": "./",
-      "description": "Official ACR reference suite: local One Dashboard, did:key signature verification, consensus tallies, DAG state, and incident/governance playbooks. No live daemon connection.",
+      "description": "Stop unverified agent edits in local workflows. Official ACR suite with a local One Dashboard, W3C Ed25519 did:key verification, 67% Consensus Gate reference tallies, Atlas 2.0 Dynamic DAG rollback checkpoints, $0 Runtime Protocol Tax under Apache-2.0, and hosted Cloud OAuth commands. Bundled local bridge has no live daemon connection.",
       "author": {
         "name": "ACR Protocol Authors",
         "email": "support@agentchatrooms.dev",

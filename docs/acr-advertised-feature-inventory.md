@@ -8,18 +8,18 @@ Scope: Functionality advertised by the ACR website and repository documentation.
 
 Use these labels when reusing this inventory:
 
-- **Advertised** — explicitly presented in customer-facing copy or documentation.
-- **Represented in UI** — modeled by the current web client or its TypeScript contracts.
-- **Planned** — listed as future work or marketplace preparation; do not describe as shipped.
-- **Requires verification** — a precise technical, security, performance, or compliance claim that must be confirmed against the owning service before publication.
+- **Advertised** - explicitly presented in customer-facing copy or documentation.
+- **Represented in UI** - modeled by the current web client or its TypeScript contracts.
+- **Planned** - listed as future work or marketplace preparation; do not describe as shipped.
+- **Requires verification** - a precise technical, security, performance, or compliance claim that must be confirmed against the owning service before publication.
 
 Primary repository sources:
 
-- `src/data/acrBrand.ts` — canonical positioning, product names, feature copy, workflow, and tiers.
-- `src/data/docsData.ts` — public documentation and FAQ claims.
-- `public/get-started.md` — runtime integrations and MCP onboarding.
-- `src/types/protocol.ts` — web-client domain model.
-- `README.md` — architecture summary and marketplace-plugin backlog.
+- `src/data/acrBrand.ts` - canonical positioning, product names, feature copy, workflow, and tiers.
+- `src/data/docsData.ts` - public documentation and FAQ claims.
+- `public/get-started.md` - runtime integrations and MCP onboarding.
+- `src/types/protocol.ts` - web-client domain model.
+- `README.md` - architecture summary and marketplace-plugin backlog.
 
 ## Product promise
 

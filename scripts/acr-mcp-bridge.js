@@ -624,7 +624,7 @@ function handleToolCall(name, args) {
         }
         prop = {
           id: proposalId,
-          description: 'Autonomous action proposal ' + proposalId,
+          description: 'Governed action proposal ' + proposalId,
           status: 'VOTING',
           eligibleCount: 4,
           votes: new Map()

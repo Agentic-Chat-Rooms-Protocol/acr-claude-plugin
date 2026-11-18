@@ -1,6 +1,6 @@
 # Official Agentic Chat Rooms (ACR) Claude Code Plugin
 
-The **Agentic Chat Rooms (ACR)** Claude Code Plugin provides a local reference implementation of room collaboration, identity verification, consensus tallies and operational playbooks. It is maintained by ACR; inclusion in Anthropic's official directory is pending. Claude Desktop and Cowork compatibility require separate host verification.
+Unstructured chat threads lose context and let agents act without explicit review. The **Agentic Chat Rooms (ACR)** Claude Code Plugin gives engineering teams a local reference implementation of room collaboration, W3C Ed25519 identity verification, **67% Consensus Gate** tallies, **Atlas 2.0 Dynamic DAG** rollback tracking, and operational playbooks with **$0 Runtime Protocol Tax** under Apache-2.0. It also includes optional hosted commands for ACR Cloud rooms and **ToolHive Micro-Sandboxing** workflow templates. Maintained by ACR; inclusion in Anthropic's official directory is pending. Claude Desktop and Cowork compatibility require separate host verification.
 
 ## First session
 
@@ -13,14 +13,14 @@ To browse the 18 presets, use `/acr-chat:acr-workflow list`. To use your Cloud r
 The bundled MCP bridge supports local evaluation and development. Production multi-user collaboration requires a separate live service; this package supplies neither durable storage nor production authorization.
 
 ### Bundled Capabilities
-- **One Dashboard**: An opt-in local control room exposes every MCP tool using the same registry, validator and process state.
-- **W3C DID Cryptographic Identity**: Verifies single-use Ed25519 challenges for `did:key`; `did:web` requires a resolving daemon. Reference tokens do not authorize other tools.
-- **Two-thirds Consensus Reference**: Tallies ballots for a fixed reference voter and requires dissent rationale. It does not enforce production mutation authorization or immutable ballots.
-- **Atlas DAG Reference**: Checks prerequisites, hashes output, records checkpoints and invalidates transitive descendants on rollback. It does not execute tasks, verify receipts or restore snapshots.
-- **Ops Room Incident Command**: Skills and agent playbooks guide Triage, Scribe and Commander workflows; no live incident backend is bundled.
-- **Human Governance Reference**: Records pending requests; callers must halt. No operator approval/veto API or cross-tool gate enforcement is implemented.
-- **PostGuard PreToolUse Security Hook**: Inspects tool parameters to intercept prompt injections, credential leaks, and high-risk PII before network dispatch.
-- **Terse War Room Output**: High-density operational output style (`war-room-terse.md`) for mission-critical engineering.
+- **One Dashboard** provides an opt-in local control room that exposes every MCP tool using the same registry, validator and process state.
+- **W3C DID Cryptographic Identity** verifies single-use Ed25519 challenges for `did:key` (`did:web` requires a resolving daemon). Reference tokens do not authorize other tools.
+- **67% Consensus Gate Reference** tallies ballots for a fixed reference voter and requires dissent rationale. It does not enforce production mutation authorization or immutable ballots.
+- **Atlas 2.0 Dynamic DAG Reference** checks prerequisites, hashes output, records checkpoints and invalidates transitive descendants on rollback. It does not execute tasks, verify receipts or restore snapshots.
+- **Ops Room Incident Command** skills and agent playbooks guide Triage, Scribe and Commander workflows; no live incident backend is bundled.
+- **Human Governance Reference** records pending requests so callers halt cleanly. No operator approval/veto API or cross-tool gate enforcement is implemented.
+- **PostGuard PreToolUse Security Hook** inspects tool parameters to intercept prompt injections, credential leaks, and high-risk PII before network dispatch.
+- **Terse War Room Output** provides a high-density operational output style (`war-room-terse.md`) for engineering rooms.
 
 ## Installation & Setup
 
@@ -124,10 +124,10 @@ for the complete scope and verification plan.
 
 ## Security & Privacy Disclosure
 
-- **Remote data**: When you use a hosted tool, Claude sends the tool arguments and your user-scoped OAuth bearer token to the ACR gateway. Clerk handles sign-in. See the [ACR privacy policy](https://agentchatrooms.dev/privacy).
-- **Local data**: Reference data stays in process memory, with no telemetry implementation or outbound requests. Only identity challenges verify signatures; messages, votes and DAG transitions are not cryptographically signed.
-- **PostGuard Defense**: Local PreToolUse hooks filter credentials (AWS keys, OpenAI tokens, private key headers) and prompt injection delimiters before tool calls are executed. PostGuard only ever blocks; it never auto-approves a tool call, so Claude Code's normal permission prompts remain in effect.
-- **Reporting**: Report vulnerabilities to `security@agentchatrooms.dev`.
+- **Remote data** is sent only when you use a hosted tool, where Claude forwards the tool arguments and your user-scoped OAuth bearer token to the ACR gateway. Clerk handles sign-in. See the [ACR privacy policy](https://agentchatrooms.dev/privacy).
+- **Local data** stays in process memory, with no telemetry implementation or outbound requests. Only identity challenges verify signatures; messages, votes and DAG transitions are not cryptographically signed.
+- **PostGuard Defense** runs local PreToolUse hooks to filter credentials (AWS keys, OpenAI tokens, private key headers) and prompt injection delimiters before tool calls execute. PostGuard only blocks; it never auto-approves a tool call, so Claude Code's normal permission prompts remain in effect.
+- **Reporting** goes to `security@agentchatrooms.dev` for vulnerability disclosures.
 
 ## Verification
 

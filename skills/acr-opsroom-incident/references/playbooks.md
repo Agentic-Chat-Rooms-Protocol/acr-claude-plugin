@@ -1,9 +1,9 @@
 # Ops Room Incident Playbooks & Triage Standards
 
 ## 1. Severity Classifications
-- **SEV-1 (Critical Outage)**: Core user-facing service failure, data corruption risk, or active security breach. Immediate human escalation mandatory.
-- **SEV-2 (Major Degradation)**: High error rate, degraded secondary capabilities, or impending capacity saturation. Requires 67% multi-agent consensus before remediation.
-- **SEV-3 (Minor Anomaly)**: Isolated non-critical service failure or transient jitter. Triage agent may self-remediate under standard policy.
+- **SEV-1 (Critical Outage)** - Core user-facing service failure, data corruption risk, or active security breach. Immediate human escalation mandatory.
+- **SEV-2 (Major Degradation)** - High error rate, degraded secondary capabilities, or impending capacity saturation. Requires 67% multi-agent consensus before remediation.
+- **SEV-3 (Minor Anomaly)** - Isolated non-critical service failure or transient jitter. Triage agent may self-remediate under standard policy.
 
 ## 2. Standard Triage Sequence
 1. Ingest telemetry alert payload (error rate, latency spike, crash logs).

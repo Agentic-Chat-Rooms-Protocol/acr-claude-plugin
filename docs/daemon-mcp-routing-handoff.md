@@ -173,17 +173,17 @@ about 60 seconds so a lapsed account does not hammer the gateway.
 
 ### 5.5 Credentials
 
-- **Preferred:** let the MCP host do OAuth (Claude Code, Claude Desktop, Cursor and ChatGPT are understood to support
+- **Preferred** - let the MCP host do OAuth (Claude Code, Claude Desktop, Cursor and ChatGPT are understood to support
   remote MCP with OAuth; *Confirm* per client and version). The generated config contains the pinned URL and **no secret**. ACR code never handles a token.
 - **When ACR must hold a token** (for example `acr` CLI features): OAuth 2.1 authorization code with PKCE `S256`,
   loopback redirect `http://127.0.0.1:<ephemeral>/callback` (RFC 8252) or device code on headless hosts. Discover via
   RFC 9728, then authorization-server metadata. Send the `resource` parameter (RFC 8707) and verify the metadata's
   `resource` equals the pinned URL before sending any token. Request only `acr:rooms acr:cloud:pro`, and only when the
   user opts in; free users are never prompted.
-- **Storage:** macOS Keychain, Windows Credential Manager, or libsecret. If none exists, refuse and tell the user; do not
+- **Storage** - macOS Keychain, Windows Credential Manager, or libsecret. If none exists, refuse and tell the user; do not
   fall back to a plaintext file. Never put the token in `ports.json`, the daemon's database, argv, a URL, a log, or a
   child process environment.
-- **Two credentials, never interchangeable:** the local API token (section 7, never leaves the machine) and the Cloud
+- **Two credentials, never interchangeable** - the local API token (section 7, never leaves the machine) and the Cloud
   token (audience is the remote gateway only, never sent to `127.0.0.1`).
 - `acr logout` deletes the keychain item and revokes the refresh token if the server supports it (*Confirm*).
 - Do not use `${user_config.*}` to collect the token for the Claude plugin. Use the host's remote-server OAuth.

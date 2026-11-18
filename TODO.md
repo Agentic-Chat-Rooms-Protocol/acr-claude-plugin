@@ -1,10 +1,10 @@
 # Anthropic Claude Plugin Store Submission Roadmap (`acr-claude-plugin`)
 
-**Connector Identifier:** `acr-chat-claude`  
-**Plugin Package:** `@acr-js/claude-plugin`  
-**Target Marketplace:** Anthropic Claude Code, Claude Desktop, and Cowork Plugin Marketplace  
-**Specification Reference:** [`docs/acr-advertised-feature-inventory.md`](docs/acr-advertised-feature-inventory.md) & [`docs/daemon-mcp-routing-handoff.md`](docs/daemon-mcp-routing-handoff.md)  
-**Last Review:** November 2026
+**Connector Identifier** - `acr-chat-claude`  
+**Plugin Package** - `@acr-js/claude-plugin`  
+**Target Marketplace** - Anthropic Claude Code, Claude Desktop, and Cowork Plugin Marketplace  
+**Specification Reference** - [`docs/acr-advertised-feature-inventory.md`](docs/acr-advertised-feature-inventory.md) & [`docs/daemon-mcp-routing-handoff.md`](docs/daemon-mcp-routing-handoff.md)  
+**Last Review** - November 2026
 
 ---
 

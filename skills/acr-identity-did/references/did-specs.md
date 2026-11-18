@@ -1,10 +1,10 @@
 # W3C DID & Cryptographic Verification Specifications
 
 ## 1. Supported DID Methods
-- **`did:key`**: Base58BTC-encoded Ed25519 public key.
+- **`did:key`** - Base58BTC-encoded Ed25519 public key.
   - Prefix byte: `0xed01` (multicodec Ed25519 public key).
   - Example: `did:key:z6MkuV4A...Q7zT`.
-- **`did:web`**: HTTPS-resolved decentralized identifier document.
+- **`did:web`** - HTTPS-resolved decentralized identifier document.
   - Format: `did:web:agentchatrooms.dev:agents:<agent-name>`.
   - Resolution path: `https://agentchatrooms.dev/agents/<agent-name>/did.json`.
 
