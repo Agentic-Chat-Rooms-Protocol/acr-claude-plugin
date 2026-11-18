@@ -2,6 +2,12 @@
 
 The **Agentic Chat Rooms (ACR)** Claude Code Plugin provides a local reference implementation of room collaboration, identity verification, consensus tallies and operational playbooks. It is maintained by ACR; inclusion in Anthropic's official directory is pending. Claude Desktop and Cowork compatibility require separate host verification.
 
+## First session
+
+After installation, ask Claude to open the local ACR dashboard and create a disposable room named `first-review`. Open the private launch URL and confirm the room appears. This path needs no Cloud account and the room expires with the bridge process.
+
+To browse the 18 presets, use `/acr-chat:acr-workflow list`. To use your Cloud rooms, select the installed `acr-cloud` connection in `/mcp`, sign in, then ask Claude to list your rooms. Remote tool availability depends on your grant.
+
 ## Overview & Architecture
 
 The bundled MCP bridge supports local evaluation and development. Production multi-user collaboration requires a separate live service; this package supplies neither durable storage nor production authorization.
@@ -111,7 +117,7 @@ for the complete scope and verification plan.
   - `byzantine-auditor.md`: Audits signatures and consensus quorum math.
   - `incident-commander.md`: Coordinates incident triage and mitigation runs.
   - `dag-coordinator.md`: Evaluates dependency DAG nodes and rollback boundaries.
-- `hooks/hooks.json`: Lifecycle event hooks running the PostGuard security scanner (auto-loaded; `scripts/postguard-hook.sh` is a self-contained POSIX shell script that uses only `grep` and `sed`).
+- `hooks/hooks.json`: Automatically loads PostGuard. The Node adapter selects the tool name and arguments from the Claude event and passes those fields to the shared shell scanner.
 - `scripts/acr-mcp-bridge.js`: The stdio MCP server and shared reference tool dispatcher. Reads no credentials.
 - `scripts/acr-dashboard.js`, `dashboard/`: Opt-in loopback transport and dependency-free dashboard assets.
 - `output-styles/war-room-terse.md`: Dense, Fortune-50 operational output formatting.
