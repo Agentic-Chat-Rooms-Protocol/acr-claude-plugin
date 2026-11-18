@@ -210,6 +210,13 @@ for (const agentFile of EXPECTED_AGENTS) {
     assert(content.includes('tools:'), 'Agent must declare tools');
     assert(content.includes('Negative Bounds') || content.includes('Negative Constraints'), 'Agent must specify negative bounds');
     assert(content.includes('Output Contract'), 'Agent must specify output contract');
+    const fm = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    assert(fm, `Agent ${agentFile} must have valid YAML frontmatter`);
+    const toolLines = fm[1].match(/^\s+-\s+(.+)$/gm) || [];
+    for (const line of toolLines) {
+      const toolName = line.replace(/^\s+-\s+/, '').trim();
+      assert(toolName.startsWith('mcp__plugin_acr-chat_acr-server__'), `Agent ${agentFile} tool '${toolName}' must use mcp__plugin_acr-chat_acr-server__ namespace`);
+    }
   });
 }
 
@@ -711,6 +718,13 @@ async function testBridgeHardening() {
     for (const fabricated of ['audit_block_height', 'connected_agents', 'latency_ms', 'mesh']) {
       assert(!(fabricated in health), `health must not report simulated '${fabricated}'`);
     }
+  });
+
+  await runAsyncTest('Bridge: chat.config.get defaults CORS and PNA off', async () => {
+    const results = await runBridgeSession({}, [callTool('chat.config.get', {})]);
+    const cfg = toolData(results[0]);
+    assert.strictEqual(cfg.cors_enabled, false);
+    assert.strictEqual(cfg.pna_enabled, false);
   });
 
   await runAsyncTest('Bridge: human gates are fail-closed at the cap and reclaimed after their deadline', async () => {
