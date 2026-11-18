@@ -10,7 +10,7 @@ try {
   const result = spawnSync(process.platform === 'win32' ? 'sh' : '/bin/sh',
     [path.join(__dirname, 'postguard-hook.sh')], {
       input: JSON.stringify({ tool_name, tool_input }), encoding: 'utf8',
-      timeout: 3000, maxBuffer: 16384
+      timeout: 10000, maxBuffer: 16384
     });
   if (result.error || result.status !== 0 || result.stderr) throw new Error();
   if (result.stdout.trim()) {

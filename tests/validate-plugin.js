@@ -728,11 +728,12 @@ async function testBridgeHardening() {
   });
 
   await runAsyncTest('Bridge: human gates are fail-closed at the cap and reclaimed after their deadline', async () => {
-    const gate = () => callTool('acr_request_human_gate', { action_hash: 'h', description: 'd', risk_level: 'HIGH', timeout_sec: 1 });
+    const gate = (timeout_sec = 1) => callTool('acr_request_human_gate', { action_hash: 'h', description: 'd', risk_level: 'HIGH', timeout_sec });
     const steps = [];
-    for (let i = 0; i < 1000; i++) steps.push(gate());
-    steps.push(gate());
-    steps.push(() => new Promise(resolve => setTimeout(() => resolve(gate()), 1200)));
+    for (let i = 0; i < 999; i++) steps.push(gate(10));
+    steps.push(gate(1));
+    steps.push(gate(1));
+    steps.push(() => new Promise(resolve => setTimeout(() => resolve(gate(1)), 1200)));
     const results = await runBridgeSession({}, steps);
     assert(toolData(results[999]).gateId, 'gate 1000 must be accepted');
     assert(/limit/i.test(toolData(results[1000]).error), 'gate 1001 must be refused while 1000 are pending');
